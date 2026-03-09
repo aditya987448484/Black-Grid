@@ -16,6 +16,8 @@ class BacktestModelResult(BaseModel):
     sharpeRatio: float
     maxDrawdown: float
     volatility: float
+    calmarRatio: float = 0.0
+    totalTrades: int = 0
     description: str
     equityCurve: list[EquityPoint]
 
@@ -25,3 +27,4 @@ class BacktestSummaryResponse(BaseModel):
     benchmarkReturn: float
     period: str
     ticker: str
+    dataPoints: int = 0

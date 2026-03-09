@@ -124,7 +124,7 @@ async def _fetch_opensky() -> list[dict] | None:
         return None
 
 
-MIN_FLIGHT_COUNT = 60  # Minimum markers for a rich global view
+MIN_FLIGHT_COUNT = 150  # Minimum markers for a rich global view
 
 
 async def get_flights() -> tuple[list[dict], str]:
@@ -152,4 +152,4 @@ async def get_flights() -> tuple[list[dict], str]:
         return live + padding, "opensky+simulated"
 
     print("[flight_data] All providers failed. Using mock.")
-    return _mock_flights(120), "mock"
+    return _mock_flights(200), "mock"

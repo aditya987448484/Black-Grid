@@ -44,8 +44,15 @@ export function getReport(ticker: string) {
   return fetcher<AnalystReportResponse>(`/api/asset/${ticker}/report`);
 }
 
-export function getBacktestSummary() {
-  return fetcher<BacktestSummaryResponse>("/api/backtests/summary");
+export async function getBacktestSummary(
+  ticker: string = "SPY",
+  startDate?: string,
+  endDate?: string,
+): Promise<BacktestSummaryResponse> {
+  const params = new URLSearchParams({ ticker });
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  return fetcher<BacktestSummaryResponse>(`/api/backtests/summary?${params.toString()}`);
 }
 
 export function getWatchlist() {

@@ -6,6 +6,8 @@ export interface BacktestModelResult {
   sharpeRatio: number;
   maxDrawdown: number;
   volatility: number;
+  calmarRatio: number;
+  totalTrades: number;
   description: string;
   equityCurve: { date: string; value: number }[];
 }
@@ -15,4 +17,5 @@ export interface BacktestSummaryResponse {
   benchmarkReturn: number;
   period: string;
   ticker: string;
+  dataPoints: number;
 }

@@ -334,7 +334,7 @@ async def _yfinance_history(ticker: str, period: str = "6mo") -> Optional[pd.Dat
 
         def _fetch():
             t = yf.Ticker(ticker)
-            return t.history(period=period)
+            return t.history(period=period, auto_adjust=True, actions=False)
 
         loop = asyncio.get_event_loop()
         hist = await loop.run_in_executor(None, _fetch)
@@ -367,6 +367,47 @@ async def _yfinance_history(ticker: str, period: str = "6mo") -> Optional[pd.Dat
         return None
 
 
+async def _yfinance_history_range(ticker: str, start: str, end: str) -> Optional[pd.DataFrame]:
+    """yfinance with exact start/end date range."""
+    cache_key = f"yf_range_{ticker}_{start}_{end}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        import yfinance as yf
+        import asyncio
+
+        def _fetch():
+            t = yf.Ticker(ticker)
+            return t.history(start=start, end=end, auto_adjust=True, actions=False)
+
+        loop = asyncio.get_event_loop()
+        hist = await loop.run_in_executor(None, _fetch)
+        if hist is None or len(hist) == 0:
+            return None
+        rows = []
+        for date, row in hist.iterrows():
+            rows.append({
+                "date": str(date.date()),
+                "open": round(float(row["Open"]), 4),
+                "high": round(float(row["High"]), 4),
+                "low": round(float(row["Low"]), 4),
+                "close": round(float(row["Close"]), 4),
+                "volume": int(row["Volume"]),
+            })
+        df = pd.DataFrame(rows)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+        print(f"[market_data:yf] {len(df)} rows for {ticker} {start}\u2192{end}")
+        _set_cached(cache_key, df)
+        return df
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"[market_data:yf] Range error {ticker}: {e}")
+        return None
+
+
 def _derive_quote_from_df(df: pd.DataFrame) -> dict:
     """Derive a quote dict from the last two rows of a price history DataFrame."""
     last = df.iloc[-1]
@@ -384,28 +425,65 @@ def _derive_quote_from_df(df: pd.DataFrame) -> dict:
 # ── Public API ───────────────────────────────────────────────────────────────
 
 async def fetch_price_history(ticker: str, outputsize: str = "full") -> Optional[pd.DataFrame]:
-    """Fetch OHLCV history. Tries AV → Finnhub → Twelve Data → yfinance."""
+    """Fetch OHLCV history.
+    Priority: yfinance (free, max history) → AV → Finnhub → Twelve Data.
+    yfinance is first because it provides the most data (up to 20 years) for free.
+    """
+    # 1. yfinance — primary, free, 5-20 years of data
+    period = "2y" if outputsize == "compact" else "max"
+    df = await _yfinance_history(ticker, period=period)
+    if df is not None and len(df) > 50:
+        return df
+
+    # 2. Alpha Vantage fallback
     df = await _av_price_history(ticker, outputsize)
     if df is not None and len(df) > 0:
         return df
 
-    days = 100 if outputsize == "compact" else 365
+    # 3. Finnhub fallback
+    days = 100 if outputsize == "compact" else 730
     df = await _finnhub_candles(ticker, days)
     if df is not None and len(df) > 0:
         return df
 
+    # 4. Twelve Data fallback
     sz = 100 if outputsize == "compact" else 365
     df = await _twelve_data_history(ticker, outputsize=sz)
     if df is not None and len(df) > 0:
         return df
 
-    # yfinance: free, unlimited, covers all Nasdaq/NYSE
-    period = "3mo" if outputsize == "compact" else "1y"
-    df = await _yfinance_history(ticker, period=period)
-    if df is not None and len(df) > 0:
+    print(f"[market_data] All providers failed for {ticker} history.")
+    return None
+
+
+async def fetch_price_history_range(
+    ticker: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Optional[pd.DataFrame]:
+    """Fetch OHLCV data for a specific date range.
+    yfinance supports exact ranges natively; fallback providers are sliced by date.
+    """
+    from datetime import date as _date
+    if not start_date:
+        start_date = "2000-01-01"
+    if not end_date:
+        end_date = str(_date.today())
+
+    # 1. yfinance — native date range support
+    df = await _yfinance_history_range(ticker, start_date, end_date)
+    if df is not None and len(df) > 50:
         return df
 
-    print(f"[market_data] All providers failed for {ticker} history.")
+    # 2-4. Fallback providers: fetch full history then slice
+    df = await fetch_price_history(ticker, outputsize="full")
+    if df is not None and len(df) > 0:
+        df = df[(df["date"] >= pd.Timestamp(start_date)) &
+                (df["date"] <= pd.Timestamp(end_date))].reset_index(drop=True)
+        if len(df) > 50:
+            return df
+
+    print(f"[market_data] All providers failed for {ticker} {start_date}\u2192{end_date}")
     return None
 
 

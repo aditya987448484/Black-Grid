@@ -31,7 +31,7 @@ CHOKEPOINTS = [
 ]
 
 
-def _mock_ships(count: int = 80) -> list[dict]:
+def _mock_ships(count: int = 200) -> list[dict]:
     ships = []
     for i in range(count):
         if i < len(CHOKEPOINTS) * 3:
@@ -121,4 +121,4 @@ async def get_ships() -> tuple[list[dict], str]:
         return ships, "marinetraffic"
 
     print("[ship_data] All providers failed. Using mock.")
-    return _mock_ships(), "mock"
+    return _mock_ships(200), "mock"
