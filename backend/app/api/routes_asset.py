@@ -130,17 +130,33 @@ async def asset_forecast(ticker: str):
 @router.get("/{ticker}/report", response_model=AnalystReportResponse)
 async def asset_report(ticker: str):
     ticker = ticker.upper()
+    print(f"[route:report] Generating report for {ticker}")
 
     try:
+        # Fetch all data in parallel where possible
         forecast = await get_forecast(ticker)
 
+        # Fetch chart data + quote (needed for report AND for frontend charts)
+        quote, df = await fetch_quote_and_history(ticker)
+
+        chart_data = []
+        if df is not None and len(df) > 0:
+            for _, row in df.iterrows():
+                chart_data.append({
+                    "date": str(row["date"])[:10],
+                    "open": round(float(row["open"]), 2),
+                    "high": round(float(row["high"]), 2),
+                    "low": round(float(row["low"]), 2),
+                    "close": round(float(row["close"]), 2),
+                    "volume": int(row["volume"]),
+                })
+
         technicals_dict = None
-        df = await fetch_price_history(ticker, outputsize="compact")
         if df is not None and len(df) >= 60:
             try:
                 technicals_dict = compute_all_indicators(df)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[route:report] Technicals failed for {ticker}: {e}")
 
         sec_data = await fetch_company_facts(ticker)
         fundamentals = build_fundamental_summary(sec_data, ticker)
@@ -152,8 +168,18 @@ async def asset_report(ticker: str):
             forecast=forecast,
             macro=macro,
             fundamentals=fundamentals,
+            quote=quote,
+            chart_data=chart_data,
         )
+
+        # Ensure quote and chart are in response even if report was cached
+        if not report.get("quote") and quote:
+            report["quote"] = quote
+        if not report.get("chart") and chart_data:
+            report["chart"] = chart_data
+
+        print(f"[route:report] Report for {ticker}: rating={report.get('rating')}, sections={len(report.get('sections', []))}, chart_points={len(chart_data)}")
         return report
     except Exception as e:
-        print(f"[route:report] Report generation failed for {ticker}: {e}")
+        print(f"[route:report] Report generation failed for {ticker}: {type(e).__name__}: {e}")
         return mock_report(ticker)

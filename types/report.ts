@@ -3,6 +3,22 @@ export interface ReportSection {
   content: string;
 }
 
+export interface ReportPricePoint {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ReportQuote {
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+}
+
 export interface AnalystReportResponse {
   ticker: string;
   name: string;
@@ -25,4 +41,7 @@ export interface AnalystReportResponse {
   risksCatalysts: string;
   analystConclusion: string;
   disclaimer: string;
+  // Chart data and quote for rendering
+  quote?: ReportQuote;
+  chart?: ReportPricePoint[];
 }

@@ -12,6 +12,7 @@ from app.api.routes_portfolio import router as portfolio_router
 from app.api.routes_world_hub import router as world_hub_router
 from app.api.routes_search import router as search_router
 from app.api.routes_ai_analyst import router as ai_analyst_router
+from app.core.config import log_config_status
 
 app = FastAPI(
     title="BlackGrid API",
@@ -34,6 +35,14 @@ app.include_router(portfolio_router)
 app.include_router(world_hub_router)
 app.include_router(search_router)
 app.include_router(ai_analyst_router)
+
+
+@app.on_event("startup")
+async def startup():
+    log_config_status()
+    # Pre-warm the ticker universe
+    from app.services.market_universe import ensure_universe_loaded
+    await ensure_universe_loaded()
 
 
 @app.get("/")

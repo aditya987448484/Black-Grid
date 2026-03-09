@@ -9,6 +9,22 @@ class ReportSection(BaseModel):
     content: str
 
 
+class ReportPricePoint(BaseModel):
+    date: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
+class ReportQuote(BaseModel):
+    price: float
+    change: float
+    changePercent: float
+    volume: int = 0
+
+
 class AnalystReportResponse(BaseModel):
     ticker: str
     name: str
@@ -17,17 +33,20 @@ class AnalystReportResponse(BaseModel):
     confidenceScore: float
     sector: Optional[str] = None
     analystName: str = "BlackGrid Research"
-    sections: list[ReportSection]
-    executiveSummary: str
+    sections: list[ReportSection] = []
+    executiveSummary: str = ""
     keyHighlights: str = ""
-    technicalView: str
-    fundamentalSnapshot: str
-    macroContext: str
-    forecastView: str
+    technicalView: str = ""
+    fundamentalSnapshot: str = ""
+    macroContext: str = ""
+    forecastView: str = ""
     valuationScenarios: str = ""
     competitiveLandscape: str = ""
-    bullCase: str
-    bearCase: str
-    risksCatalysts: str
+    bullCase: str = ""
+    bearCase: str = ""
+    risksCatalysts: str = ""
     analystConclusion: str = ""
     disclaimer: str = ""
+    # Chart data and quote for frontend rendering
+    quote: Optional[ReportQuote] = None
+    chart: list[ReportPricePoint] = []

@@ -1,8 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, TrendingUp, Shield, Activity, ChevronRight } from "lucide-react";
+import { AlertTriangle, TrendingUp, Shield, Activity, ChevronRight, Zap } from "lucide-react";
 import type { GeopoliticalMarker, AssetSensitivity, WorldHubOverview } from "@/types/world-hub";
 
 interface IntelPanelProps {
@@ -22,6 +23,7 @@ function eventTypeColor(t: string): string {
     case "trade_chokepoint": return "text-accent";
     case "energy_route": return "text-accent-violet";
     case "critical_infrastructure": return "text-success";
+    case "news_sentiment": return "text-pink-400";
     default: return "text-warning";
   }
 }
@@ -43,6 +45,8 @@ function riskRange(filter: string): [number, number] {
   }
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
 export default function IntelPanel({
   overview,
   events,
@@ -53,6 +57,28 @@ export default function IntelPanel({
   assetFilter,
 }: IntelPanelProps) {
   const [minRisk, maxRisk] = riskRange(riskFilter);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+
+  // Reset AI analysis when selected event changes
+  useEffect(() => {
+    setAiAnalysis(null);
+    setLoadingAI(false);
+  }, [selectedEvent?.id]);
+
+  const fetchAIAnalysis = async () => {
+    if (!selectedEvent) return;
+    setLoadingAI(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/world-hub/event-impact/${selectedEvent.id}`);
+      const data = await res.json();
+      setAiAnalysis(data.analysis || data.error || "Unable to load analysis.");
+    } catch {
+      setAiAnalysis("Unable to load analysis. Check backend connection.");
+    } finally {
+      setLoadingAI(false);
+    }
+  };
 
   const filtered = events.filter((e) => {
     if (region !== "All" && e.region !== region) return false;
@@ -139,53 +165,119 @@ export default function IntelPanel({
         </div>
       )}
 
-      {/* Selected event detail */}
+      {/* ═══════════ Selected event detail (rich panel) ═══════════ */}
       {selectedEvent && (
         <motion.div
-          initial={{ opacity: 0, y: 5 }}
+          key={selectedEvent.id}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4 border-accent/20"
+          className="glass-card p-4"
         >
-          <div className={cn("text-xs font-semibold mb-1", eventTypeColor(selectedEvent.eventType))}>
-            {selectedEvent.eventType.replace(/_/g, " ").toUpperCase()}
-          </div>
-          <h4 className="text-sm font-bold mb-2">{selectedEvent.title}</h4>
-          <p className="text-xs text-text-secondary leading-relaxed mb-3">{selectedEvent.summary}</p>
-          <div className="flex gap-4 mb-3">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-[10px] text-text-muted">Severity</p>
-              <p className={cn("text-sm font-bold", severityLabel(selectedEvent.severity).color)}>
-                {severityLabel(selectedEvent.severity).label}
-              </p>
+              <div className={cn("text-[10px] font-bold tracking-widest mb-1 uppercase", eventTypeColor(selectedEvent.eventType))}>
+                {selectedEvent.eventType.replace(/_/g, " ")}
+              </div>
+              <h4 className="text-sm font-bold leading-tight">{selectedEvent.title}</h4>
+              <p className="text-[10px] text-text-muted mt-0.5">{selectedEvent.region} · {selectedEvent.source}</p>
             </div>
-            <div>
-              <p className="text-[10px] text-text-muted">Market Impact</p>
-              <p className="text-sm font-bold">{(selectedEvent.marketImpact * 100).toFixed(0)}%</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-text-muted">Region</p>
-              <p className="text-sm font-semibold text-text-secondary">{selectedEvent.region}</p>
+            <div className={cn("text-lg font-black ml-3 flex-shrink-0", severityLabel(selectedEvent.severity).color)}>
+              {severityLabel(selectedEvent.severity).label}
             </div>
           </div>
-          <div>
-            <p className="text-[10px] text-text-muted mb-1.5">Affected Assets</p>
-            <div className="space-y-1.5">
-              {selectedEvent.affectedAssets.map((a) => (
-                <div key={a.assetClass} className="flex items-center gap-2">
-                  <span className="text-[10px] text-text-secondary w-24 truncate">{a.assetClass}</span>
-                  <div className="flex-1 h-1 rounded-full bg-surface-hover overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-accent"
-                      style={{ width: `${a.score * 100}%` }}
-                    />
+
+          {/* Severity + Impact meters */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {[
+              { label: "Severity", value: selectedEvent.severity, color: "#ef4444" },
+              { label: "Mkt Impact", value: selectedEvent.marketImpact, color: "#00d4ff" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-surface-hover rounded-lg p-2">
+                <p className="text-[10px] text-text-muted mb-1">{label}</p>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 h-1.5 rounded-full bg-surface overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${value * 100}%`, background: color }} />
                   </div>
-                  <span className="text-[10px] text-text-muted">
-                    {a.tickers.slice(0, 3).join(", ")}
-                  </span>
+                  <span className="text-xs font-bold" style={{ color }}>{(value * 100).toFixed(0)}%</span>
                 </div>
-              ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Summary */}
+          <p className="text-xs text-text-secondary leading-relaxed mb-3 border-l-2 border-accent/30 pl-2">
+            {selectedEvent.summary}
+          </p>
+
+          {/* Asset class impact — full breakdown */}
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+              Market Impact by Asset Class
+            </p>
+            <div className="space-y-2">
+              {[...selectedEvent.affectedAssets]
+                .sort((a, b) => b.score - a.score)
+                .map((a) => {
+                  const impactColor = a.score > 0.8 ? "#ef4444" : a.score > 0.6 ? "#f59e0b" : a.score > 0.4 ? "#00d4ff" : "#22c55e";
+                  const direction = selectedEvent.eventType === "active_conflict" || selectedEvent.severity > 0.7 ? "Bearish" : "Bullish";
+                  const dirColor = direction === "Bearish" ? "#ef4444" : "#22c55e";
+                  const dirArrow = direction === "Bearish" ? "\u25BC" : "\u25B2";
+                  return (
+                    <div key={a.assetClass} className="bg-surface-hover rounded-lg p-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold">{a.assetClass}</span>
+                        <span className="text-[10px] font-bold" style={{ color: dirColor }}>{dirArrow} {direction}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="flex-1 h-1 rounded-full bg-surface overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${a.score * 100}%`, background: impactColor }} />
+                        </div>
+                        <span className="text-[10px] font-bold" style={{ color: impactColor }}>{(a.score * 100).toFixed(0)}%</span>
+                      </div>
+                      {a.tickers.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {a.tickers.slice(0, 5).map((t) => (
+                            <span key={t} className="text-[9px] font-mono bg-surface px-1.5 py-0.5 rounded text-accent">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           </div>
+
+          {/* AI Market Analysis button / result */}
+          {!aiAnalysis ? (
+            <button
+              onClick={fetchAIAnalysis}
+              disabled={loadingAI}
+              className="w-full mt-1 py-1.5 text-xs font-semibold rounded-lg bg-accent/10
+                         hover:bg-accent/20 text-accent border border-accent/20 transition-all
+                         disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              {loadingAI ? (
+                <><div className="h-3 w-3 rounded-full border-2 border-accent border-t-transparent animate-spin" /> Generating analysis...</>
+              ) : (
+                <><Zap className="h-3 w-3" /> Get AI Market Analysis</>
+              )}
+            </button>
+          ) : (
+            <div className="mt-2 p-3 bg-surface-hover rounded-lg border border-accent/10">
+              <p className="text-[10px] font-semibold text-accent mb-2 uppercase tracking-wider">AI Market Analysis</p>
+              <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-line">{aiAnalysis}</p>
+            </div>
+          )}
+
+          {/* Timestamp */}
+          {(selectedEvent as any).timestamp && (
+            <p className="text-[10px] text-text-muted text-right mt-2">
+              Updated: {new Date((selectedEvent as any).timestamp).toLocaleString()}
+            </p>
+          )}
         </motion.div>
       )}
 

@@ -56,6 +56,7 @@ ASSET_DB = {
     "SPY": {"name": "S&P 500 ETF", "sector": "ETF", "base_price": 525.40, "mcap": 0},
     "QQQ": {"name": "Nasdaq 100 ETF", "sector": "ETF", "base_price": 445.80, "mcap": 0},
     "GLD": {"name": "Gold ETF", "sector": "Commodity", "base_price": 212.50, "mcap": 0},
+    "RKLB": {"name": "Rocket Lab USA Inc.", "sector": "Aerospace & Defense", "base_price": 22.50, "mcap": 11_000_000_000},
 }
 
 
@@ -68,20 +69,16 @@ def get_asset_info(ticker: str) -> dict:
     # Try the live universe cache (imported lazily to avoid circular imports)
     from app.services.market_universe import get_company_info_from_universe
     uni = get_company_info_from_universe(t)
-    if uni:
+    if uni and uni.get("name") and uni["name"] != t:
         return {
             "name": uni.get("name", t),
             "sector": uni.get("sector") or "Unknown",
-            "base_price": 100 + random.uniform(0, 200),
+            "base_price": 100.0,
             "mcap": 0,
         }
 
-    return {
-        "name": f"{t}",
-        "sector": "Unknown",
-        "base_price": 100 + random.uniform(0, 200),
-        "mcap": 0,
-    }
+    # Last resort — return minimal info, fundamentals fetch will populate later
+    return {"name": t, "sector": "Unknown", "base_price": 100.0, "mcap": 0}
 
 
 def mock_market_overview() -> dict:

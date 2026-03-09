@@ -75,6 +75,7 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const eventsRef = useRef<GeopoliticalMarker[]>([]);
 
   // ── Initialize map ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -107,8 +108,34 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
 
     map.on("load", () => {
 
+      // ── Load custom icons ───────────────────────────────────────────────
+      // Flight icon (airplane emoji) — convert canvas to ImageData for Mapbox
+      const flightCanvas = document.createElement("canvas");
+      flightCanvas.width = 24; flightCanvas.height = 24;
+      const ftx = flightCanvas.getContext("2d")!;
+      ftx.font = "18px serif";
+      ftx.textAlign = "center";
+      ftx.textBaseline = "middle";
+      ftx.fillText("\u2708", 12, 12);
+      const flightImgData = ftx.getImageData(0, 0, 24, 24);
+      map.addImage("flight-icon", { width: 24, height: 24, data: new Uint8Array(flightImgData.data.buffer) }, { pixelRatio: 2 });
+
+      // Ship icon (green filled triangle) — convert canvas to ImageData for Mapbox
+      const shipCanvas = document.createElement("canvas");
+      shipCanvas.width = 20; shipCanvas.height = 20;
+      const stx = shipCanvas.getContext("2d")!;
+      stx.fillStyle = "#22c55e";
+      stx.beginPath();
+      stx.moveTo(10, 0); stx.lineTo(20, 20); stx.lineTo(0, 20); stx.closePath();
+      stx.fill();
+      stx.strokeStyle = "rgba(255,255,255,0.6)";
+      stx.lineWidth = 1.5;
+      stx.stroke();
+      const shipImgData = stx.getImageData(0, 0, 20, 20);
+      map.addImage("ship-icon", { width: 20, height: 20, data: new Uint8Array(shipImgData.data.buffer) }, { pixelRatio: 2 });
+
       // ═══════════════════════════════════════════════════════════════════
-      //  FLIGHTS — cyan, visible from global zoom
+      //  FLIGHTS — ✈ icons rotated to heading
       // ═══════════════════════════════════════════════════════════════════
       map.addSource("flights", {
         type: "geojson",
@@ -142,36 +169,27 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
         paint: { "text-color": "#ffffff" },
       });
 
-      // Individual flight markers — visible from zoom 0+
+      // Individual flight markers — ✈ icon rotated to heading
       map.addLayer({
         id: "flights-point",
-        type: "circle",
+        type: "symbol",
         source: "flights",
         filter: ["!", ["has", "point_count"]],
+        layout: {
+          "icon-image": "flight-icon",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.5, 5, 0.75, 10, 1.1],
+          "icon-rotate": ["get", "heading"],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
         paint: {
-          "circle-color": "#00d4ff",
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 3, 4, 4, 8, 6],
-          "circle-opacity": 0.9,
-          "circle-stroke-width": 1.5,
-          "circle-stroke-color": "rgba(0, 212, 255, 0.5)",
+          "icon-opacity": 0.95,
         },
       });
 
-      // Glow halo around flight markers
-      map.addLayer({
-        id: "flights-glow",
-        type: "circle",
-        source: "flights",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-color": "#00d4ff",
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 8, 4, 10, 8, 14],
-          "circle-opacity": 0.12,
-        },
-      }, "flights-point");
-
       // ═══════════════════════════════════════════════════════════════════
-      //  SHIPS — green, visible from global zoom
+      //  SHIPS — ▲ triangles rotated to heading
       // ═══════════════════════════════════════════════════════════════════
       map.addSource("ships", {
         type: "geojson",
@@ -204,34 +222,24 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
         paint: { "text-color": "#ffffff" },
       });
 
+      // Individual ship markers — ▲ triangle rotated to heading
       map.addLayer({
         id: "ships-point",
-        type: "circle",
+        type: "symbol",
         source: "ships",
         filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-color": "#22c55e",
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 3, 4, 4.5, 8, 6],
-          "circle-opacity": 0.9,
-          "circle-stroke-width": 1.5,
-          "circle-stroke-color": "rgba(34, 197, 94, 0.5)",
+        layout: {
+          "icon-image": "ship-icon",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 1, 0.5, 5, 0.75, 10, 1.0],
+          "icon-rotate": ["get", "heading"],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
         },
       });
 
-      map.addLayer({
-        id: "ships-glow",
-        type: "circle",
-        source: "ships",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-color": "#22c55e",
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 8, 4, 10, 8, 14],
-          "circle-opacity": 0.12,
-        },
-      }, "ships-point");
-
       // ═══════════════════════════════════════════════════════════════════
-      //  GEOPOLITICAL — color-coded, always visible
+      //  GEOPOLITICAL — color-coded with pulsing rings
       // ═══════════════════════════════════════════════════════════════════
       map.addSource("geopolitical", {
         type: "geojson",
@@ -308,8 +316,27 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
         minzoom: 2.5,
       });
 
+      // ── Animate pulse rings ───────────────────────────────────────────
+      let pulseSize = 0;
+      let pulseGrowing = true;
+      const pulseInterval = setInterval(() => {
+        if (!mapRef.current) return;
+        pulseGrowing ? (pulseSize += 0.03) : (pulseSize -= 0.03);
+        if (pulseSize >= 1) pulseGrowing = false;
+        if (pulseSize <= 0) pulseGrowing = true;
+        try {
+          map.setPaintProperty("geo-pulse", "circle-opacity", 0.08 + pulseSize * 0.14);
+          map.setPaintProperty("geo-pulse", "circle-radius", [
+            "interpolate", ["linear"], ["zoom"],
+            1, ["interpolate", ["linear"], ["get", "severity"], 0.3, 10 + pulseSize * 8, 1.0, 22 + pulseSize * 12],
+            5, ["interpolate", ["linear"], ["get", "severity"], 0.3, 20 + pulseSize * 14, 1.0, 40 + pulseSize * 20],
+          ]);
+        } catch { /* layer may not exist yet */ }
+      }, 80);
+      (map as any)._pulseInterval = pulseInterval;
+
       // ═══════════════════════════════════════════════════════════════════
-      //  POPUPS
+      //  POPUPS + event selection
       // ═══════════════════════════════════════════════════════════════════
       const popup = new mapboxgl.Popup({
         closeButton: true,
@@ -390,6 +417,10 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
             </div>
           `)
           .addTo(map);
+
+        // Also fire the side panel selection
+        const fullEvent = eventsRef.current.find((ev) => ev.id === p.id);
+        if (fullEvent) onEventSelect(fullEvent);
       });
 
       // Cursor on hover
@@ -417,13 +448,19 @@ export default function WorldMap({ flights, ships, events, layers, onEventSelect
     });
 
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      clearInterval((map as any)._pulseInterval);
+      map.remove();
+      mapRef.current = null;
+    };
   }, []);
 
   // ── Update data when props/layers change ──────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
+
+    eventsRef.current = events;
 
     const flightSrc = map.getSource("flights") as mapboxgl.GeoJSONSource | undefined;
     if (flightSrc) flightSrc.setData(flightsToGeoJSON(layers.flights ? flights : []));
