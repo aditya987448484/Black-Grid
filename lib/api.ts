@@ -90,6 +90,7 @@ export async function strategyChat(payload: {
   ticker: string;
   start_date?: string;
   end_date?: string;
+  model?: string;
 }): Promise<{
   reply: string;
   strategy_key: string | null;

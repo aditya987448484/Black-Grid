@@ -118,10 +118,10 @@ export default function PerformanceChart({ models, selectedIdx = 0 }: Props) {
               fontSize: 12,
               padding: "8px 12px",
             }}
-            formatter={(value: number, name: string) => [
-              `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`,
-              name,
-            ]}
+            formatter={((value?: number, name?: string) => [
+              value != null ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "—",
+              name ?? "",
+            ]) as never}
             labelFormatter={label => {
               if (!label) return "";
               return new Date(label).toLocaleDateString("en-US", {

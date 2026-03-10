@@ -384,7 +384,13 @@ def _derive_quote_from_df(df: pd.DataFrame) -> dict:
 # ── Public API ───────────────────────────────────────────────────────────────
 
 async def fetch_price_history(ticker: str, outputsize: str = "full") -> Optional[pd.DataFrame]:
-    """Fetch OHLCV history. Tries AV → Finnhub → Twelve Data → yfinance."""
+    """Fetch OHLCV history. yfinance PRIMARY → AV → Finnhub → Twelve Data."""
+    # yfinance first: free, unlimited, covers all Nasdaq/NYSE
+    period = "3mo" if outputsize == "compact" else "max"
+    df = await _yfinance_history(ticker, period=period)
+    if df is not None and len(df) > 0:
+        return df
+
     df = await _av_price_history(ticker, outputsize)
     if df is not None and len(df) > 0:
         return df
@@ -396,12 +402,6 @@ async def fetch_price_history(ticker: str, outputsize: str = "full") -> Optional
 
     sz = 100 if outputsize == "compact" else 365
     df = await _twelve_data_history(ticker, outputsize=sz)
-    if df is not None and len(df) > 0:
-        return df
-
-    # yfinance: free, unlimited, covers all Nasdaq/NYSE
-    period = "3mo" if outputsize == "compact" else "1y"
-    df = await _yfinance_history(ticker, period=period)
     if df is not None and len(df) > 0:
         return df
 
@@ -483,7 +483,12 @@ async def fetch_price_history_range(
 
 
 async def fetch_quote(ticker: str) -> Optional[dict]:
-    """Fetch latest quote. Tries AV → Finnhub → Twelve Data."""
+    """Fetch latest quote. yfinance PRIMARY → AV → Finnhub → Twelve Data."""
+    # Try yfinance first — derive quote from recent history
+    df = await _yfinance_history(ticker, period="5d")
+    if df is not None and len(df) >= 2:
+        return _derive_quote_from_df(df)
+
     quote = await _av_quote(ticker)
     if quote:
         return quote

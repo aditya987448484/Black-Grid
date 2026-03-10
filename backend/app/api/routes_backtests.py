@@ -24,12 +24,19 @@ async def backtest_summary(
     strategies: Optional[str] = Query(default=None),  # comma-separated keys
 ):
     keys = [k.strip() for k in strategies.split(",")] if strategies else None
-    return await get_backtest_summary(
-        ticker.upper().strip(),
+    ticker_clean = ticker.upper().strip()
+    print(f"[backtests] GET /summary ticker={ticker_clean} start={start_date} end={end_date}")
+    result = await get_backtest_summary(
+        ticker_clean,
         start_date,
         end_date,
         strategy_keys=keys,
     )
+    if result.get("error"):
+        print(f"[backtests] Error for {ticker_clean}: {result['error']}")
+    else:
+        print(f"[backtests] {ticker_clean}: {result.get('dataPoints', 0)} bars, {len(result.get('models', []))} strategies")
+    return result
 
 
 @router.get("/strategies/list")
@@ -68,6 +75,7 @@ class ChatRequest(BaseModel):
     ticker: str = "SPY"
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    model: str = "claude-sonnet-4-6"
 
 
 @router.post("/strategies/chat")
@@ -119,6 +127,13 @@ Rules:
             messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": req.message})
 
+    if not ANTHROPIC_API_KEY:
+        print("[strategy_chat] ERROR: ANTHROPIC_API_KEY is not set!")
+        return {"reply": "API key not configured. Set ANTHROPIC_API_KEY in your .env file.", "strategy_key": None, "params": {}, "run_immediately": False}
+
+    model_id = req.model or "claude-sonnet-4-6"
+    print(f"[strategy_chat] Using model: {model_id} | Ticker: {req.ticker}")
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -129,7 +144,7 @@ Rules:
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": model_id,
                     "max_tokens": 800,
                     "system": system_prompt,
                     "messages": messages,

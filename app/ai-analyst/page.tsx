@@ -17,7 +17,7 @@ export default function AiAnalystPage() {
   const [loading, setLoading] = useState(false);
   const [workspace, setWorkspace] = useState<AiAnalystResponse | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
-  const [model, setModel] = useState("claude-sonnet-4-20250514");
+  const [model, setModel] = useState("claude-sonnet-4-6");
 
   useEffect(() => {
     try {

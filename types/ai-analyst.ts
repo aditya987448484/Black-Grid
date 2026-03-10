@@ -49,10 +49,12 @@ export interface AiAnalystResponse {
 export interface ModelOption {
   id: string;
   label: string;
+  badge?: string;
 }
 
 export const ANTHROPIC_MODELS: ModelOption[] = [
-  { id: "claude-sonnet-4-20250514", label: "Sonnet 4" },
-  { id: "claude-opus-4-20250514", label: "Opus 4" },
-  { id: "claude-haiku-4-20250514", label: "Haiku 4" },
+  { id: "claude-opus-4-6", label: "Opus 4.6", badge: "Most Powerful" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6", badge: "Recommended" },
+  { id: "claude-sonnet-4-20250514", label: "Sonnet 4", badge: "" },
+  { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", badge: "Fastest" },
 ];

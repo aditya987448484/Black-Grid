@@ -206,17 +206,28 @@ export default function ChatPanel({ messages, onSend, loading, model, onModelCha
         )}
         {/* Model dropdown — rendered OUTSIDE the composer box so it's never clipped */}
         {showModelMenu && (
-          <div ref={modelMenuRef} className="absolute bottom-[68px] right-6 w-40 bg-[#0c0c12] border border-white/[0.12] rounded-xl shadow-2xl shadow-black/60 py-1.5 z-[100]">
+          <div ref={modelMenuRef} className="absolute bottom-[68px] right-6 w-52 bg-[#0c0c12] border border-white/[0.12] rounded-xl shadow-2xl shadow-black/60 py-1.5 z-[100]">
             {ANTHROPIC_MODELS.map((m) => (
               <button
                 key={m.id}
                 onClick={() => { onModelChange(m.id); setShowModelMenu(false); }}
                 className={cn(
-                  "w-full text-left px-4 py-2 text-[11px] transition-colors",
+                  "w-full text-left px-4 py-2 text-[11px] transition-colors flex items-center justify-between",
                   m.id === model ? "text-accent bg-accent/10" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]"
                 )}
               >
-                {m.label}
+                <span>{m.label}</span>
+                {m.badge && (
+                  <span className={cn(
+                    "text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider",
+                    m.badge === "Most Powerful" ? "bg-purple-500/20 text-purple-400" :
+                    m.badge === "Recommended" ? "bg-accent/20 text-accent" :
+                    m.badge === "Fastest" ? "bg-emerald-500/20 text-emerald-400" :
+                    "bg-white/10 text-gray-400"
+                  )}>
+                    {m.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>

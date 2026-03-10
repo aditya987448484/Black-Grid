@@ -1,30 +1,21 @@
 export interface BacktestModelResult {
   modelName: string;
-  accuracy: number;
-  cumulativeReturn: number;
-  winRate: number;
-  sharpeRatio: number;
-  maxDrawdown: number;
-  volatility: number;
-  description: string;
-  calmarRatio?: number;
-  totalTrades?: number;
   strategyKey?: string;
   category?: string;
-  insufficientData?: boolean;
+  description?: string;
   params?: Record<string, number>;
-  equityCurve: { date: string; value: number }[];
   isCustom?: boolean;
   customLabel?: string;
-}
-
-export interface BacktestSummaryResponse {
-  models: BacktestModelResult[];
-  benchmarkReturn: number;
-  period: string;
-  ticker: string;
-  dataPoints: number;
-  error?: string;
+  cumulativeReturn: number;
+  sharpeRatio: number;
+  winRate: number;
+  maxDrawdown: number;
+  volatility: number;
+  calmarRatio?: number;
+  totalTrades?: number;
+  accuracy?: number;
+  insufficientData?: boolean;
+  equityCurve: { date: string; value: number }[];
 }
 
 export interface StrategyMeta {
@@ -36,13 +27,6 @@ export interface StrategyMeta {
 
 export type StrategyRegistry = Record<string, StrategyMeta>;
 
-export interface ChatStrategyMessage {
-  role: "user" | "assistant";
-  content: string;
-  strategyResult?: BacktestModelResult;
-  marketContext?: string;
-}
-
 export interface SavedStrategy {
   id: string;
   label: string;
@@ -50,5 +34,31 @@ export interface SavedStrategy {
   params: Record<string, number>;
   ticker: string;
   savedAt: string;
-  result?: BacktestModelResult;
+  result: BacktestModelResult;
+}
+
+export interface BacktestSummaryResponse {
+  ticker: string;
+  period: string;
+  dataPoints: number;
+  models: BacktestModelResult[];
+  benchmarkReturn: number;
+  error?: string;
+}
+
+export interface ChatStrategyMessage {
+  role: "user" | "assistant";
+  content: string;
+  strategyResult?: BacktestModelResult;
+  marketContext?: string;
+  timestamp?: string;
+  attachments?: AttachmentMeta[];
+}
+
+export interface AttachmentMeta {
+  filename: string;
+  contentType: string;
+  size: number;
+  base64?: string;
+  textContent?: string;
 }
