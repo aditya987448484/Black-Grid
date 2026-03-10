@@ -1,17 +1,29 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { aiAnalystChat } from "@/lib/api";
 import type { ChatMessage, AiAnalystResponse, AttachmentMeta } from "@/types/ai-analyst";
 import ChatPanel from "@/components/ai-analyst/ChatPanel";
 import AnalystWorkspace from "@/components/ai-analyst/AnalystWorkspace";
 
 export default function AiAnalystPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("blackgrid_analyst_chat");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const [loading, setLoading] = useState(false);
   const [workspace, setWorkspace] = useState<AiAnalystResponse | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [model, setModel] = useState("claude-sonnet-4-20250514");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("blackgrid_analyst_chat", JSON.stringify(messages.slice(-60)));
+    } catch {}
+  }, [messages]);
 
   const handleSend = useCallback(async (message: string, attachments: AttachmentMeta[]) => {
     const userMsg: ChatMessage = { role: "user", content: message };
@@ -51,6 +63,10 @@ export default function AiAnalystPage() {
           loading={loading}
           model={model}
           onModelChange={setModel}
+          onClearHistory={() => {
+            setMessages([]);
+            try { localStorage.removeItem("blackgrid_analyst_chat"); } catch {}
+          }}
         />
       </div>
       <div className="flex-1 min-w-0 flex flex-col">

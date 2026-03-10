@@ -29,9 +29,10 @@ interface Props {
   loading: boolean;
   model: string;
   onModelChange: (model: string) => void;
+  onClearHistory?: () => void;
 }
 
-export default function ChatPanel({ messages, onSend, loading, model, onModelChange }: Props) {
+export default function ChatPanel({ messages, onSend, loading, model, onModelChange, onClearHistory }: Props) {
   const [input, setInput] = useState("");
   const [statusIdx, setStatusIdx] = useState(0);
   const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
@@ -194,6 +195,15 @@ export default function ChatPanel({ messages, onSend, loading, model, onModelCha
   function renderComposer() {
     return (
       <div className="px-4 pb-4 pt-2 relative">
+        {/* Clear history */}
+        {messages.length > 0 && onClearHistory && (
+          <div className="flex justify-end mb-1">
+            <button onClick={onClearHistory}
+              className="text-[10px] text-gray-600 hover:text-danger transition-colors px-1">
+              Clear history
+            </button>
+          </div>
+        )}
         {/* Model dropdown — rendered OUTSIDE the composer box so it's never clipped */}
         {showModelMenu && (
           <div ref={modelMenuRef} className="absolute bottom-[68px] right-6 w-40 bg-[#0c0c12] border border-white/[0.12] rounded-xl shadow-2xl shadow-black/60 py-1.5 z-[100]">

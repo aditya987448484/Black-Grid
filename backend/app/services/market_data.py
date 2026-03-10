@@ -320,7 +320,7 @@ async def _twelve_data_quote(ticker: str) -> Optional[dict]:
 
 # ── yfinance (free, unlimited, covers all Nasdaq/NYSE) ───────────────────────
 
-async def _yfinance_history(ticker: str, period: str = "6mo") -> Optional[pd.DataFrame]:
+async def _yfinance_history(ticker: str, period: str = "max") -> Optional[pd.DataFrame]:
     """yfinance fallback — free, covers virtually all US-listed stocks."""
     cache_key = f"yf_hist_{ticker}_{period}"
     cached = _get_cached(cache_key)
@@ -334,7 +334,7 @@ async def _yfinance_history(ticker: str, period: str = "6mo") -> Optional[pd.Dat
 
         def _fetch():
             t = yf.Ticker(ticker)
-            return t.history(period=period)
+            return t.history(period=period, auto_adjust=True, actions=False)
 
         loop = asyncio.get_event_loop()
         hist = await loop.run_in_executor(None, _fetch)
@@ -406,6 +406,79 @@ async def fetch_price_history(ticker: str, outputsize: str = "full") -> Optional
         return df
 
     print(f"[market_data] All providers failed for {ticker} history.")
+    return None
+
+
+async def fetch_price_history_range(
+    ticker: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> Optional[pd.DataFrame]:
+    """Fetch OHLCV for an explicit date range.
+
+    Uses yfinance FIRST (supports start/end natively, free, unlimited).
+    Falls back to Alpha Vantage full history sliced by date.
+    This is the primary data fetcher for the Backtest Lab.
+    """
+    from datetime import date as _date
+    if not start_date:
+        start_date = "2010-01-01"
+    if not end_date:
+        end_date = str(_date.today())
+
+    cache_key = f"range_{ticker}_{start_date}_{end_date}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        print(f"[market_data] Cache hit for {ticker} {start_date}->{end_date}")
+        return cached
+
+    # 1. yfinance with exact date range — primary source
+    try:
+        import yfinance as yf
+        import asyncio as _asyncio
+
+        def _fetch_range():
+            t = yf.Ticker(ticker)
+            return t.history(start=start_date, end=end_date, auto_adjust=True, actions=False)
+
+        loop = _asyncio.get_event_loop()
+        hist = await loop.run_in_executor(None, _fetch_range)
+
+        if hist is not None and len(hist) >= 20:
+            rows = []
+            for date_idx, row in hist.iterrows():
+                rows.append({
+                    "date": str(date_idx.date()),
+                    "open": round(float(row["Open"]), 4),
+                    "high": round(float(row["High"]), 4),
+                    "low": round(float(row["Low"]), 4),
+                    "close": round(float(row["Close"]), 4),
+                    "volume": int(row["Volume"]),
+                })
+            df = pd.DataFrame(rows)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.sort_values("date").reset_index(drop=True)
+            print(f"[market_data:yf] {len(df)} bars for {ticker} {start_date}->{end_date}")
+            _set_cached(cache_key, df)
+            return df
+        else:
+            print(f"[market_data:yf] Empty response for {ticker} range {start_date}->{end_date}")
+    except ImportError:
+        print("[market_data:yf] yfinance not installed — run: pip install yfinance")
+    except Exception as e:
+        print(f"[market_data:yf_range] {ticker}: {e}")
+
+    # 2. Alpha Vantage full history, then slice
+    df = await _av_price_history(ticker, "full")
+    if df is not None and len(df) > 0:
+        mask = (df["date"] >= pd.Timestamp(start_date)) & (df["date"] <= pd.Timestamp(end_date))
+        sliced = df[mask].reset_index(drop=True)
+        if len(sliced) >= 20:
+            print(f"[market_data:av_slice] {len(sliced)} bars for {ticker}")
+            _set_cached(cache_key, sliced)
+            return sliced
+
+    print(f"[market_data] All providers failed for {ticker} {start_date}->{end_date}")
     return None
 
 

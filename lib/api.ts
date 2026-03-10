@@ -18,7 +18,7 @@ async function fetcher<T>(path: string): Promise<T> {
 import type { MarketOverviewResponse } from "@/types/market";
 import type { AssetDetail, AssetTechnicalResponse, AssetForecastResponse } from "@/types/asset";
 import type { AnalystReportResponse } from "@/types/report";
-import type { BacktestSummaryResponse } from "@/types/backtest";
+import type { BacktestSummaryResponse, BacktestModelResult, StrategyRegistry } from "@/types/backtest";
 import type { WatchlistResponse } from "@/types/portfolio";
 import type { FlightsResponse, ShipsResponse, GeopoliticalResponse, WorldHubOverview } from "@/types/world-hub";
 import type { CompanySearchResponse } from "@/types/universe";
@@ -46,6 +46,65 @@ export function getReport(ticker: string) {
 
 export function getBacktestSummary() {
   return fetcher<BacktestSummaryResponse>("/api/backtests/summary");
+}
+
+export async function getBacktestResults(
+  ticker = "SPY",
+  startDate?: string,
+  endDate?: string,
+): Promise<BacktestSummaryResponse> {
+  const params = new URLSearchParams({ ticker });
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  const res = await fetch(`${BASE_URL}/api/backtests/summary?${params}`);
+  if (!res.ok) throw new Error(`Backtest failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getStrategyList(): Promise<StrategyRegistry> {
+  const res = await fetch(`${BASE_URL}/api/backtests/strategies/list`);
+  if (!res.ok) throw new Error("Failed to load strategies");
+  return res.json();
+}
+
+export async function runCustomStrategy(payload: {
+  ticker: string;
+  strategy_key: string;
+  params: Record<string, number>;
+  custom_name?: string;
+  start_date?: string;
+  end_date?: string;
+}): Promise<BacktestModelResult> {
+  const res = await fetch(`${BASE_URL}/api/backtests/strategies/run-custom`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Custom strategy failed: ${res.status}`);
+  return res.json();
+}
+
+export async function strategyChat(payload: {
+  message: string;
+  history: { role: string; content: string }[];
+  ticker: string;
+  start_date?: string;
+  end_date?: string;
+}): Promise<{
+  reply: string;
+  strategy_key: string | null;
+  params: Record<string, number>;
+  run_immediately: boolean;
+  strategyResult?: BacktestModelResult;
+  market_context?: string;
+}> {
+  const res = await fetch(`${BASE_URL}/api/backtests/strategies/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
+  return res.json();
 }
 
 export function getWatchlist() {
