@@ -328,36 +328,45 @@ def mock_report(ticker: str) -> dict:
 
 
 def mock_backtest_summary() -> dict:
+    """Mock backtest with correct model names and all required fields."""
+    rng = random.Random(42)
+
+    def _mock_model(name, drift, vol_s, desc):
+        curve = _generate_equity_curve(252)
+        ret = (curve[-1]["value"] / 100) - 1
+        max_dd = round(rng.uniform(0.05, 0.20), 4)
+        sharpe = round(rng.uniform(0.1, 1.2), 2)
+        return {
+            "modelName": name,
+            "accuracy": round(rng.uniform(0.48, 0.58), 3),
+            "cumulativeReturn": round(ret, 4),
+            "winRate": round(rng.uniform(0.48, 0.56), 4),
+            "sharpeRatio": sharpe,
+            "maxDrawdown": max_dd,
+            "volatility": round(rng.uniform(0.12, 0.25), 4),
+            "calmarRatio": round(ret / max_dd, 2) if max_dd > 0 else 0.0,
+            "totalTrades": rng.randint(12, 120),
+            "description": f"MOCK DATA \u2014 {desc}",
+            "insufficientData": False,
+            "equityCurve": curve,
+        }
+
     models = [
-        {
-            "modelName": "Baseline (LogReg)",
-            "accuracy": round(random.uniform(0.52, 0.58), 3),
-            "cumulativeReturn": round(random.uniform(0.05, 0.18), 3),
-            "winRate": round(random.uniform(0.51, 0.56), 3),
-            "sharpeRatio": round(random.uniform(0.4, 1.2), 2),
-            "maxDrawdown": round(random.uniform(0.08, 0.18), 3),
-            "volatility": round(random.uniform(0.12, 0.22), 3),
-            "description": "Logistic regression trained on rolling 60-day windows using RSI, MACD, EMA crossovers, volume change, and rolling volatility features. Predicts next-day direction with walk-forward validation.",
-            "equityCurve": _generate_equity_curve(200),
-        },
-        {
-            "modelName": "Buy & Hold",
-            "accuracy": 0.5,
-            "cumulativeReturn": round(random.uniform(0.02, 0.12), 3),
-            "winRate": round(random.uniform(0.49, 0.52), 3),
-            "sharpeRatio": round(random.uniform(0.2, 0.8), 2),
-            "maxDrawdown": round(random.uniform(0.10, 0.25), 3),
-            "volatility": round(random.uniform(0.15, 0.25), 3),
-            "description": "Passive buy-and-hold benchmark. No signal-based trading. Serves as the baseline comparison for active strategies.",
-            "equityCurve": _generate_equity_curve(200),
-        },
+        _mock_model("RSI Mean Reversion", 0.0004, 0.010, "Buy RSI<30, short RSI>70."),
+        _mock_model("MACD Trend Following", 0.0003, 0.011, "MACD histogram crossover with EMA50 filter."),
+        _mock_model("Bollinger Squeeze", 0.0005, 0.013, "Breakout from low-volatility squeeze."),
+        _mock_model("ATR Volatility Channel", 0.0002, 0.009, "ATR channel breakout with trailing stop."),
+        _mock_model("RSI+MACD+Volume", 0.0006, 0.008, "Triple confirmation strategy."),
+        _mock_model("Buy & Hold", 0.0003, 0.012, "Passive benchmark, 100% invested."),
     ]
+    models.sort(key=lambda x: x["sharpeRatio"], reverse=True)
 
     return {
         "models": models,
-        "benchmarkReturn": models[1]["cumulativeReturn"],
-        "period": "2024-01-01 to 2024-12-31",
-        "ticker": "SPY",
+        "benchmarkReturn": next((m["cumulativeReturn"] for m in models if m["modelName"] == "Buy & Hold"), 0.0),
+        "period": "2024-01-01 to 2024-12-31 (MOCK)",
+        "ticker": "MOCK",
+        "dataPoints": 252,
     }
 
 

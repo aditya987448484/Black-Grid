@@ -20,6 +20,7 @@ class BacktestModelResult(BaseModel):
     totalTrades: int = 0
     description: str
     equityCurve: list[EquityPoint]
+    insufficientData: bool = False
 
 
 class BacktestSummaryResponse(BaseModel):
