@@ -76,6 +76,7 @@ class ChatRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     model: str = "claude-sonnet-4-6"
+    api_key: Optional[str] = None
 
 
 @router.post("/strategies/chat")
@@ -127,19 +128,21 @@ Rules:
             messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": req.message})
 
-    if not ANTHROPIC_API_KEY:
-        print("[strategy_chat] ERROR: ANTHROPIC_API_KEY is not set!")
-        return {"reply": "API key not configured. Set ANTHROPIC_API_KEY in your .env file.", "strategy_key": None, "params": {}, "run_immediately": False}
+    effective_key = req.api_key or ANTHROPIC_API_KEY
+    if not effective_key:
+        print("[strategy_chat] ERROR: No API key — neither client api_key nor server ANTHROPIC_API_KEY is set!")
+        return {"reply": "No API key configured. Either set ANTHROPIC_API_KEY in the backend .env file, or enter your key in the Strategy Chat API key panel.", "strategy_key": None, "params": {}, "run_immediately": False}
 
     model_id = req.model or "claude-sonnet-4-6"
-    print(f"[strategy_chat] Using model: {model_id} | Ticker: {req.ticker}")
+    key_source = "client" if req.api_key else "server .env"
+    print(f"[strategy_chat] Using model: {model_id} | Ticker: {req.ticker} | Key source: {key_source}")
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
-                    "x-api-key": ANTHROPIC_API_KEY,
+                    "x-api-key": effective_key,
                     "anthropic-version": "2023-06-01",
                     "content-type": "application/json",
                 },

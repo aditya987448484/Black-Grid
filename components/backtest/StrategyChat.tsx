@@ -222,6 +222,7 @@ export default function StrategyChat({
         start_date: startDate,
         end_date: endDate,
         model,
+        api_key: apiKey || undefined,
       });
 
       const assistantMsg: ChatStrategyMessage = {

@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Bookmark, BookmarkCheck, ChevronDown, SlidersHorizontal, Check } from "lucide-react";
-import { getBacktestResults, getStrategyList, runCustomStrategy } from "@/lib/api";
+import { X, Bookmark, BookmarkCheck, ChevronDown, SlidersHorizontal, Check, Search } from "lucide-react";
+import { getBacktestResults, getStrategyList, runCustomStrategy, searchCompanies } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   BacktestSummaryResponse, BacktestModelResult,
   StrategyRegistry, SavedStrategy
 } from "@/types/backtest";
+import type { CompanySearchResult } from "@/types/universe";
 import PerformanceChart from "@/components/backtest/PerformanceChart";
 import ComparisonTable from "@/components/backtest/ComparisonTable";
 import StrategyChat from "@/components/backtest/StrategyChat";
@@ -144,6 +145,89 @@ function IndicatorDropdown({ registry, activeKeys, onToggle, onSelectAll, onClea
   );
 }
 
+function TickerSearchInput({ value, onChange, onSubmit }: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const [results, setResults] = useState<CompanySearchResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [idx, setIdx] = useState(-1);
+  const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (value.length < 1) { setResults([]); setOpen(false); return; }
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => {
+      searchCompanies(value)
+        .then(r => { setResults(r.results); setOpen(r.results.length > 0); setIdx(-1); })
+        .catch(() => setResults([]));
+    }, 200);
+    return () => clearTimeout(debounce.current);
+  }, [value]);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  function select(symbol: string) {
+    onChange(symbol);
+    setOpen(false);
+    setTimeout(onSubmit, 0);
+  }
+
+  return (
+    <div ref={wrapRef} className="relative flex-1">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-text-muted pointer-events-none" />
+        <input
+          value={value}
+          onChange={e => onChange(e.target.value.toUpperCase())}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          onKeyDown={e => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx(i => Math.min(i + 1, results.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx(i => Math.max(i - 1, -1)); }
+            else if (e.key === "Escape") setOpen(false);
+            else if (e.key === "Enter") {
+              if (idx >= 0 && results[idx]) { select(results[idx].symbol); }
+              else onSubmit();
+            }
+          }}
+          placeholder="SPY" maxLength={10}
+          className="bg-surface border border-border rounded-lg pl-7 pr-3 py-1.5 text-sm font-mono w-full text-center focus:outline-none focus:border-accent"
+        />
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute top-full mt-1 left-0 w-72 bg-[#09090f] border border-white/10 rounded-xl shadow-2xl shadow-black/80 z-50 max-h-64 overflow-y-auto">
+          {results.slice(0, 8).map((r, i) => (
+            <button key={r.symbol} onClick={() => select(r.symbol)}
+              className={cn(
+                "w-full text-left px-4 py-2.5 flex items-center justify-between transition-colors",
+                i === idx ? "bg-accent/10" : "hover:bg-white/[0.04]"
+              )}>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-accent">{r.symbol}</span>
+                  {r.exchange && (
+                    <span className="text-[9px] text-text-muted bg-white/[0.06] rounded px-1.5 py-0.5">{r.exchange}</span>
+                  )}
+                </div>
+                <p className="text-xs text-text-secondary truncate">{r.name}</p>
+              </div>
+              {r.sector && <span className="text-[10px] text-text-muted flex-shrink-0 ml-3">{r.sector}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BacktestPage() {
   const [tickerInput, setTickerInput] = useState("SPY");
   const [startDate, setStartDate] = useState<string>(() => {
@@ -196,6 +280,10 @@ export default function BacktestPage() {
         if (idx >= 0) { const n = [...prev]; n[idx] = precomputedResult; return n; }
         return [...prev, precomputedResult];
       });
+      // Auto-run main backtest if no baseline data yet (so chart has context)
+      if (!data && !loading) {
+        runBacktest();
+      }
       return;
     }
     try {
@@ -206,8 +294,12 @@ export default function BacktestPage() {
         if (idx >= 0) { const n = [...prev]; n[idx] = result; return n; }
         return [...prev, result];
       });
+      // Auto-run main backtest if no baseline data yet
+      if (!data && !loading) {
+        runBacktest();
+      }
     } catch (e: any) { console.error("Custom strategy failed:", e); }
-  }, [tickerInput, startDate, endDate]);
+  }, [tickerInput, startDate, endDate, data, loading, runBacktest]);
 
   function toggleIndicator(key: string) {
     setActiveIndicators(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -240,11 +332,11 @@ export default function BacktestPage() {
         {/* Ticker + Date controls */}
         <div className="px-3 pt-3 pb-2 border-b border-white/[0.06] space-y-2">
           <div className="flex gap-2">
-            <input value={tickerInput}
-              onChange={e => setTickerInput(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === "Enter" && runBacktest()}
-              placeholder="SPY" maxLength={10}
-              className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm font-mono w-full text-center focus:outline-none focus:border-accent" />
+            <TickerSearchInput
+              value={tickerInput}
+              onChange={setTickerInput}
+              onSubmit={runBacktest}
+            />
             <button onClick={runBacktest} disabled={loading}
               className="px-3 py-1.5 text-xs font-bold rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 disabled:opacity-40 transition-all whitespace-nowrap">
               {loading ? "\u2026" : "\u25B6 Run"}

@@ -91,6 +91,7 @@ export async function strategyChat(payload: {
   start_date?: string;
   end_date?: string;
   model?: string;
+  api_key?: string;
 }): Promise<{
   reply: string;
   strategy_key: string | null;
