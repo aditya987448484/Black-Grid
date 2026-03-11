@@ -1,8 +1,9 @@
-"""Backtest routes — strategies list, run-custom, Claude-powered chat."""
+"""Backtest routes — strategies list, run-custom, Claude-powered chat, strategy engine v2."""
 
 from __future__ import annotations
 
 import json
+import traceback
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -12,6 +13,7 @@ from app.services.backtest_service import get_backtest_summary
 from app.pipelines.backtest import STRATEGY_REGISTRY, run_custom_strategy
 from app.services.market_data import fetch_price_history_range
 from app.core.config import ANTHROPIC_API_KEY
+from app.indicators.registry import INDICATOR_CATALOG
 
 router = APIRouter(prefix="/api/backtests", tags=["backtests"])
 
@@ -194,3 +196,119 @@ Rules:
         "market_context": parsed.get("market_context", ""),
         "strategyResult": result,
     }
+
+
+# ── Strategy Engine v2 endpoints ────────────────────────────────────────
+
+
+@router.get("/indicator-catalog")
+async def indicator_catalog():
+    """Return the full 100-indicator catalog for the frontend."""
+    return {
+        key: {
+            "key": key,
+            "display_name": v["display_name"],
+            "category": v["category"],
+            "parameters": v.get("parameters", {}),
+            "description": v["description"],
+            "supported_operators": v.get("supported_operators", []),
+            "required_fields": v.get("required_fields", []),
+            "output_type": v.get("output_type", "line"),
+        }
+        for key, v in INDICATOR_CATALOG.items()
+    }
+
+
+class StrategyParseRequest(BaseModel):
+    message: str
+    history: list[dict] = []
+    ticker: str = "SPY"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    model: str = "claude-sonnet-4-6"
+    api_key: Optional[str] = None
+    file_context: Optional[str] = None
+
+
+@router.post("/strategies/parse")
+async def parse_strategy_endpoint(req: StrategyParseRequest):
+    """Parse natural language into a StrategySpec via Claude."""
+    from app.strategy_engine.parser import parse_strategy
+
+    effective_key = req.api_key or ANTHROPIC_API_KEY
+    print(f"[parse] Parsing strategy for {req.ticker} | model={req.model}")
+
+    result = await parse_strategy(
+        message=req.message,
+        history=req.history,
+        ticker=req.ticker,
+        model=req.model,
+        api_key=effective_key,
+        file_context=req.file_context,
+    )
+    return result.model_dump()
+
+
+class StrategyValidateRequest(BaseModel):
+    strategy_spec: dict
+
+
+@router.post("/strategies/validate")
+async def validate_strategy_endpoint(req: StrategyValidateRequest):
+    """Validate a StrategySpec against the indicator catalog."""
+    from app.strategy_engine.schemas import StrategySpec
+    from app.strategy_engine.validator import validate_strategy
+
+    try:
+        spec = StrategySpec.model_validate(req.strategy_spec)
+        result = validate_strategy(spec)
+        return {"valid": result.valid, "errors": result.errors, "warnings": result.warnings}
+    except Exception as e:
+        return {"valid": False, "errors": [f"Invalid spec: {str(e)}"], "warnings": []}
+
+
+class StrategyRunSpecRequest(BaseModel):
+    strategy_spec: dict
+    ticker: str = "SPY"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+@router.post("/strategies/run-spec")
+async def run_strategy_spec_endpoint(req: StrategyRunSpecRequest):
+    """Compile and execute a StrategySpec through the deterministic backtest engine."""
+    from app.strategy_engine.schemas import StrategySpec
+    from app.strategy_engine.validator import validate_strategy
+    from app.strategy_engine.compiler import compile_strategy
+    from app.strategy_engine.executor import execute_strategy
+
+    try:
+        spec = StrategySpec.model_validate(req.strategy_spec)
+    except Exception as e:
+        return {"result": None, "compiled_conditions_summary": [], "error": f"Invalid spec: {str(e)}"}
+
+    # Validate
+    validation = validate_strategy(spec)
+    if not validation.valid:
+        return {"result": None, "compiled_conditions_summary": [], "error": f"Validation errors: {'; '.join(validation.errors)}"}
+
+    # Fetch data
+    ticker = req.ticker.upper().strip()
+    print(f"[run-spec] Running {spec.name} on {ticker}")
+    df = await fetch_price_history_range(ticker, req.start_date, req.end_date)
+    if df is None or len(df) < 40:
+        return {"result": None, "compiled_conditions_summary": [], "error": f"Insufficient data for {ticker} ({len(df) if df is not None else 0} bars)"}
+
+    try:
+        # Compile
+        compiled = compile_strategy(spec, df)
+        # Execute
+        result = execute_strategy(compiled, df)
+        return {
+            "result": result,
+            "compiled_conditions_summary": compiled.compiled_conditions_summary,
+            "error": None,
+        }
+    except Exception as e:
+        traceback.print_exc()
+        return {"result": None, "compiled_conditions_summary": [], "error": f"Engine error: {str(e)}"}

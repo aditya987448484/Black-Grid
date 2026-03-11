@@ -18,7 +18,11 @@ async function fetcher<T>(path: string): Promise<T> {
 import type { MarketOverviewResponse } from "@/types/market";
 import type { AssetDetail, AssetTechnicalResponse, AssetForecastResponse } from "@/types/asset";
 import type { AnalystReportResponse } from "@/types/report";
-import type { BacktestSummaryResponse, BacktestModelResult, StrategyRegistry } from "@/types/backtest";
+import type {
+  BacktestSummaryResponse, BacktestModelResult, StrategyRegistry,
+  StrategyParseResponse, StrategyRunResponse, IndicatorCatalog,
+  StrategySpec,
+} from "@/types/backtest";
 import type { WatchlistResponse } from "@/types/portfolio";
 import type { FlightsResponse, ShipsResponse, GeopoliticalResponse, WorldHubOverview } from "@/types/world-hub";
 import type { CompanySearchResponse } from "@/types/universe";
@@ -106,6 +110,62 @@ export async function strategyChat(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Strategy Engine (v2) endpoints ─────────────────────────────────
+
+export async function getIndicatorCatalog(): Promise<IndicatorCatalog> {
+  const res = await fetch(`${BASE_URL}/api/backtests/indicator-catalog`);
+  if (!res.ok) throw new Error("Failed to load indicator catalog");
+  return res.json();
+}
+
+export async function parseStrategy(payload: {
+  message: string;
+  history: { role: string; content: string }[];
+  ticker: string;
+  start_date?: string;
+  end_date?: string;
+  model?: string;
+  api_key?: string;
+  file_context?: string;
+}): Promise<StrategyParseResponse> {
+  const res = await fetch(`${BASE_URL}/api/backtests/strategies/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Parse failed: ${res.status}`);
+  return res.json();
+}
+
+export async function validateStrategy(spec: StrategySpec): Promise<{
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}> {
+  const res = await fetch(`${BASE_URL}/api/backtests/strategies/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ strategy_spec: spec }),
+  });
+  if (!res.ok) throw new Error(`Validate failed: ${res.status}`);
+  return res.json();
+}
+
+export async function runStrategySpec(payload: {
+  strategy_spec: StrategySpec;
+  ticker: string;
+  start_date?: string;
+  end_date?: string;
+}): Promise<StrategyRunResponse> {
+  const res = await fetch(`${BASE_URL}/api/backtests/strategies/run-spec`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Run spec failed: ${res.status}`);
   return res.json();
 }
 
