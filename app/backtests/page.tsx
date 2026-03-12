@@ -239,12 +239,18 @@ function TickerSearchInput({ value, onChange, onSubmit }: {
 
 export default function BacktestPage() {
   const [tickerInput, setTickerInput] = useState("SPY");
-  const [startDate, setStartDate] = useState<string>(() => {
-    const d = new Date(); d.setFullYear(d.getFullYear() - 5);
-    return d.toISOString().split("T")[0];
-  });
-  const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState("2021-01-01");
+  const [endDate, setEndDate] = useState("2026-01-01");
   const [activePreset, setActivePreset] = useState("5Y");
+
+  // Set real dates after mount to avoid hydration mismatch
+  useEffect(() => {
+    const today = new Date();
+    setEndDate(today.toISOString().split("T")[0]);
+    const fiveYearsAgo = new Date(today);
+    fiveYearsAgo.setFullYear(today.getFullYear() - 5);
+    setStartDate(fiveYearsAgo.toISOString().split("T")[0]);
+  }, []);
 
   const [data, setData] = useState<BacktestSummaryResponse | null>(null);
   const [customModels, setCustomModels] = useState<BacktestModelResult[]>([]);

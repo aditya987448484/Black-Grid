@@ -61,13 +61,7 @@ interface EnhancedMessage extends ChatStrategyMessage {
 export default function StrategyChat({
   onRunStrategy, onSaveStrategy, loading, registry, ticker, startDate, endDate, customResults,
 }: Props) {
-  const [messages, setMessages] = useState<EnhancedMessage[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(CHAT_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
+  const [messages, setMessages] = useState<EnhancedMessage[]>([]);
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [statusIdx, setStatusIdx] = useState(0);
@@ -75,21 +69,30 @@ export default function StrategyChat({
   const [model, setModel] = useState("claude-sonnet-4-6");
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showApiKeyPanel, setShowApiKeyPanel] = useState(false);
-  const [apiKey, setApiKey] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem(API_KEY_STORAGE_KEY) || "";
-  });
+  const [apiKey, setApiKey] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [savedStrategies, setSavedStrategies] = useState<SavedStrategy[]>(() => {
-    if (typeof window === "undefined") return [];
+  const [savedStrategies, setSavedStrategies] = useState<SavedStrategy[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Load from localStorage after mount to avoid hydration mismatch
+  useEffect(() => {
     try {
-      const stored = localStorage.getItem(SAVED_STRATEGIES_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
+      const storedMsgs = localStorage.getItem(CHAT_STORAGE_KEY);
+      if (storedMsgs) setMessages(JSON.parse(storedMsgs));
+    } catch {}
+    try {
+      const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+      if (storedKey) setApiKey(storedKey);
+    } catch {}
+    try {
+      const storedStrats = localStorage.getItem(SAVED_STRATEGIES_KEY);
+      if (storedStrats) setSavedStrategies(JSON.parse(storedStrats));
+    } catch {}
+    setHydrated(true);
+  }, []);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
