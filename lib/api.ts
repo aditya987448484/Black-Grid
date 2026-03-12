@@ -169,6 +169,29 @@ export async function runStrategySpec(payload: {
   return res.json();
 }
 
+export async function getIndicatorSnapshot(
+  ticker: string,
+  startDate?: string,
+  endDate?: string,
+): Promise<{
+  ticker: string;
+  bar_count: number;
+  data_source: string;
+  ohlcv_rows: Array<{date: string; open: number; high: number; low: number; close: number; volume: number}>;
+  indicator_snapshot: Record<string, number | null>;
+} | null> {
+  try {
+    const params = new URLSearchParams({ ticker });
+    if (startDate) params.set("start_date", startDate);
+    if (endDate) params.set("end_date", endDate);
+    const res = await fetch(`${BASE_URL}/api/backtests/indicator-snapshot?${params}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+    return data;
+  } catch { return null; }
+}
+
 export function getWatchlist() {
   return fetcher<WatchlistResponse>("/api/portfolio/watchlist");
 }

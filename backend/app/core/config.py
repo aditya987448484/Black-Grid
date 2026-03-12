@@ -19,6 +19,12 @@ SEC_USER_AGENT = os.getenv("SEC_USER_AGENT", "BlackGrid research@blackgrid.dev")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 NEWS_PROVIDER = os.getenv("NEWS_PROVIDER", "newsapi")
 
+# Tiingo — institutional-grade OHLCV + fundamentals
+TIINGO_API_KEY = os.getenv("TIINGO_API_KEY", "")
+
+# EODHD — End of Day Historical Data (global markets, fundamentals)
+EODHD_API_KEY = os.getenv("EODHD_API_KEY", "")
+
 # Reasoning / AI
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -45,6 +51,8 @@ MAPBOX_ACCESS_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN", "")
 def log_config_status():
     """Log which API keys are configured at startup for diagnostics."""
     keys = {
+        "TIINGO_API_KEY": TIINGO_API_KEY,
+        "EODHD_API_KEY": EODHD_API_KEY,
         "ALPHA_VANTAGE_API_KEY": ALPHA_VANTAGE_API_KEY,
         "TWELVE_DATA_API_KEY": TWELVE_DATA_API_KEY,
         "FINNHUB_API_KEY": FINNHUB_API_KEY,

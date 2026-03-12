@@ -81,6 +81,22 @@ class ChatRequest(BaseModel):
     api_key: Optional[str] = None
 
 
+def _format_snapshot(snap: dict) -> str:
+    if not snap:
+        return "No live data available."
+    lines = [
+        f"LIVE MARKET DATA for {snap['ticker']} ({snap['bar_count']} bars, source: {snap['data_source']})",
+        "Last 5 bars (OHLCV):",
+    ]
+    for bar in snap.get("ohlcv_rows", []):
+        lines.append(f"  {bar['date']}: O={bar['open']} H={bar['high']} L={bar['low']} C={bar['close']} V={bar['volume']}")
+    lines.append("\nCurrent indicator values (last bar):")
+    for k, v in snap.get("indicator_snapshot", {}).items():
+        if v is not None:
+            lines.append(f"  {k}: {round(float(v), 4) if isinstance(v, (int, float)) else v}")
+    return "\n".join(lines)
+
+
 @router.post("/strategies/chat")
 async def strategy_chat(req: ChatRequest):
     """
@@ -122,6 +138,23 @@ Rules:
 - If the user asks something non-strategy (e.g. "what is RSI?"), answer in reply and set strategy_key to null
 - Extract ticker symbols if mentioned (e.g. "backtest NVDA using RSI")
 - Understand synonyms: "turtle trading" → donchian, "death cross" → sma_crossover, "cloud" → ichimoku
+"""
+
+    # Inject live indicator data into system prompt
+    from app.services.market_data import fetch_raw_indicator_snapshot
+    snap = await fetch_raw_indicator_snapshot(req.ticker.upper(), req.start_date, req.end_date)
+    data_context = _format_snapshot(snap) if snap else "No live data available."
+    system_prompt += f"""
+
+## LIVE MARKET DATA (use this to ground your strategy)
+
+{data_context}
+
+Use the indicator values above to:
+- Detect the current market regime (trending/ranging/volatile)
+- Recommend strategy types appropriate for current conditions
+- Set realistic thresholds based on actual current indicator levels
+- Note whether strategy conditions would currently be ACTIVE or INACTIVE
 """
 
     messages = []
@@ -219,6 +252,20 @@ async def indicator_catalog():
     }
 
 
+@router.get("/indicator-snapshot")
+async def indicator_snapshot(
+    ticker: str = Query(default="SPY"),
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+):
+    """Fetch live OHLCV and compute 30+ indicator values for Claude context."""
+    from app.services.market_data import fetch_raw_indicator_snapshot
+    snap = await fetch_raw_indicator_snapshot(ticker.upper(), start_date, end_date)
+    if snap is None:
+        return {"error": f"No data for {ticker}"}
+    return snap
+
+
 class StrategyParseRequest(BaseModel):
     message: str
     history: list[dict] = []
@@ -238,13 +285,19 @@ async def parse_strategy_endpoint(req: StrategyParseRequest):
     effective_key = req.api_key or ANTHROPIC_API_KEY
     print(f"[parse] Parsing strategy for {req.ticker} | model={req.model}")
 
+    # Inject live indicator data
+    from app.services.market_data import fetch_raw_indicator_snapshot
+    snap = await fetch_raw_indicator_snapshot(req.ticker.upper(), req.start_date, req.end_date)
+    data_context = _format_snapshot(snap) if snap else ""
+    combined_context = (req.file_context or "") + ("\n\n" + data_context if data_context else "")
+
     result = await parse_strategy(
         message=req.message,
         history=req.history,
         ticker=req.ticker,
         model=req.model,
         api_key=effective_key,
-        file_context=req.file_context,
+        file_context=combined_context if combined_context.strip() else None,
     )
     return result.model_dump()
 

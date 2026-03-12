@@ -236,8 +236,10 @@ export default function StrategyChat({
         } : m));
       } else if (runResult.result) {
         const result = runResult.result as BacktestModelResult;
+        const label = `Your Strategy #${customResults.length + 1}`;
         result.isCustom = true;
-        result.customLabel = spec.name;
+        result.customLabel = label;
+        result.modelName = label;
         setMessages(prev => prev.map((m, i) => i === msgIdx ? {
           ...m,
           strategyResult: result,
@@ -248,7 +250,7 @@ export default function StrategyChat({
         onRunStrategy(
           result.strategyKey ?? `custom_${spec.name.toLowerCase().replace(/ /g, "_")}`,
           {},
-          spec.name,
+          label,
           result,
         );
       }
@@ -338,6 +340,12 @@ export default function StrategyChat({
           });
 
           if (legacyResult.strategy_key && legacyResult.strategyResult) {
+            const r = legacyResult.strategyResult as BacktestModelResult;
+            const label = `Your Strategy #${customResults.length + 1}`;
+            r.isCustom = true;
+            r.customLabel = label;
+            r.modelName = label;
+
             // Update the assistant message with the legacy result
             setMessages(prev => {
               const updated = [...prev];
@@ -346,7 +354,7 @@ export default function StrategyChat({
                 updated[lastAssistant] = {
                   ...updated[lastAssistant],
                   content: legacyResult.reply || updated[lastAssistant].content,
-                  strategyResult: legacyResult.strategyResult as BacktestModelResult,
+                  strategyResult: r,
                   marketContext: legacyResult.market_context,
                   phase: "complete",
                 };
@@ -354,12 +362,11 @@ export default function StrategyChat({
               return updated;
             });
 
-            const customName = `Custom ${customResults.length + 1}`;
             onRunStrategy(
               legacyResult.strategy_key,
               legacyResult.params,
-              customName,
-              legacyResult.strategyResult as BacktestModelResult,
+              label,
+              r,
             );
           }
         } catch {

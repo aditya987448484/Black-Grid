@@ -1,4 +1,4 @@
-"""Market data service — Alpha Vantage + Finnhub + Twelve Data with retry and cache."""
+"""Market data service — Alpha Vantage + Finnhub + Twelve Data + Tiingo + EODHD with retry and cache."""
 
 from __future__ import annotations
 
@@ -7,7 +7,13 @@ import asyncio
 import time as _time
 import httpx
 import pandas as pd
-from app.core.config import ALPHA_VANTAGE_API_KEY, FINNHUB_API_KEY, TWELVE_DATA_API_KEY
+from app.core.config import (
+    ALPHA_VANTAGE_API_KEY,
+    FINNHUB_API_KEY,
+    TWELVE_DATA_API_KEY,
+    TIINGO_API_KEY,
+    EODHD_API_KEY,
+)
 
 # ── Simple TTL cache to avoid rate-limit issues ─────────────────────────────
 _cache: dict[str, tuple[float, object]] = {}
@@ -381,25 +387,127 @@ def _derive_quote_from_df(df: pd.DataFrame) -> dict:
     }
 
 
+# ── Tiingo (institutional quality, adjusted prices) ─────────────────────────
+
+async def _tiingo_history(ticker: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[pd.DataFrame]:
+    if not TIINGO_API_KEY:
+        return None
+    cache_key = f"tiingo_{ticker}_{start_date}_{end_date}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+    url = f"https://api.tiingo.com/tiingo/daily/{ticker}/prices"
+    params = {"token": TIINGO_API_KEY}
+    if start_date:
+        params["startDate"] = start_date
+    if end_date:
+        params["endDate"] = end_date
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await _retry_request(client, "get", url, params=params, max_retries=2)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+        if not data or not isinstance(data, list):
+            return None
+        rows = []
+        for bar in data:
+            rows.append({
+                "date": bar["date"][:10],
+                "open": float(bar.get("adjOpen", bar.get("open", 0))),
+                "high": float(bar.get("adjHigh", bar.get("high", 0))),
+                "low": float(bar.get("adjLow", bar.get("low", 0))),
+                "close": float(bar.get("adjClose", bar.get("close", 0))),
+                "volume": int(bar.get("adjVolume", bar.get("volume", 0))),
+            })
+        df = pd.DataFrame(rows)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+        print(f"[market_data:tiingo] Got {len(df)} bars for {ticker}")
+        _set_cached(cache_key, df)
+        return df
+    except Exception as e:
+        print(f"[market_data:tiingo] Error {ticker}: {e}")
+        return None
+
+
+# ── EODHD (global markets, good coverage) ───────────────────────────────────
+
+async def _eodhd_history(ticker: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[pd.DataFrame]:
+    if not EODHD_API_KEY:
+        return None
+    cache_key = f"eodhd_{ticker}_{start_date}_{end_date}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+    symbol = f"{ticker}.US"
+    url = f"https://eodhd.com/api/eod/{symbol}"
+    params = {"api_token": EODHD_API_KEY, "fmt": "json"}
+    if start_date:
+        params["from"] = start_date
+    if end_date:
+        params["to"] = end_date
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await _retry_request(client, "get", url, params=params, max_retries=2)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+        if not data or not isinstance(data, list):
+            return None
+        rows = []
+        for bar in data:
+            rows.append({
+                "date": bar["date"],
+                "open": float(bar.get("open", 0)),
+                "high": float(bar.get("high", 0)),
+                "low": float(bar.get("low", 0)),
+                "close": float(bar.get("adjusted_close", bar.get("close", 0))),
+                "volume": int(bar.get("volume", 0)),
+            })
+        df = pd.DataFrame(rows)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+        print(f"[market_data:eodhd] Got {len(df)} bars for {ticker}")
+        _set_cached(cache_key, df)
+        return df
+    except Exception as e:
+        print(f"[market_data:eodhd] Error {ticker}: {e}")
+        return None
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 async def fetch_price_history(ticker: str, outputsize: str = "full") -> Optional[pd.DataFrame]:
-    """Fetch OHLCV history. yfinance PRIMARY → AV → Finnhub → Twelve Data."""
-    # yfinance first: free, unlimited, covers all Nasdaq/NYSE
+    """Fetch OHLCV history. Tiingo -> EODHD -> yfinance -> AV -> Finnhub -> Twelve Data."""
+    # 1. Tiingo (institutional quality, adjusted prices)
+    df = await _tiingo_history(ticker)
+    if df is not None and len(df) > 0:
+        return df
+
+    # 2. EODHD (global markets, good coverage)
+    df = await _eodhd_history(ticker)
+    if df is not None and len(df) > 0:
+        return df
+
+    # 3. yfinance: free, unlimited, covers all Nasdaq/NYSE
     period = "3mo" if outputsize == "compact" else "max"
     df = await _yfinance_history(ticker, period=period)
     if df is not None and len(df) > 0:
         return df
 
+    # 4. Alpha Vantage
     df = await _av_price_history(ticker, outputsize)
     if df is not None and len(df) > 0:
         return df
 
+    # 5. Finnhub candles
     days = 100 if outputsize == "compact" else 365
     df = await _finnhub_candles(ticker, days)
     if df is not None and len(df) > 0:
         return df
 
+    # 6. Twelve Data
     sz = 100 if outputsize == "compact" else 365
     df = await _twelve_data_history(ticker, outputsize=sz)
     if df is not None and len(df) > 0:
@@ -411,13 +519,12 @@ async def fetch_price_history(ticker: str, outputsize: str = "full") -> Optional
 
 async def fetch_price_history_range(
     ticker: str,
-    start_date: str | None = None,
-    end_date: str | None = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> Optional[pd.DataFrame]:
     """Fetch OHLCV for an explicit date range.
 
-    Uses yfinance FIRST (supports start/end natively, free, unlimited).
-    Falls back to Alpha Vantage full history sliced by date.
+    Waterfall: Tiingo -> EODHD -> yfinance -> Alpha Vantage slice.
     This is the primary data fetcher for the Backtest Lab.
     """
     from datetime import date as _date
@@ -432,7 +539,19 @@ async def fetch_price_history_range(
         print(f"[market_data] Cache hit for {ticker} {start_date}->{end_date}")
         return cached
 
-    # 1. yfinance with exact date range — primary source
+    # 1. Tiingo (institutional quality, adjusted prices)
+    df = await _tiingo_history(ticker, start_date, end_date)
+    if df is not None and len(df) >= 20:
+        _set_cached(cache_key, df)
+        return df
+
+    # 2. EODHD (global markets, good coverage)
+    df = await _eodhd_history(ticker, start_date, end_date)
+    if df is not None and len(df) >= 20:
+        _set_cached(cache_key, df)
+        return df
+
+    # 3. yfinance with exact date range
     try:
         import yfinance as yf
         import asyncio as _asyncio
@@ -468,7 +587,7 @@ async def fetch_price_history_range(
     except Exception as e:
         print(f"[market_data:yf_range] {ticker}: {e}")
 
-    # 2. Alpha Vantage full history, then slice
+    # 4. Alpha Vantage full history, then slice
     df = await _av_price_history(ticker, "full")
     if df is not None and len(df) > 0:
         mask = (df["date"] >= pd.Timestamp(start_date)) & (df["date"] <= pd.Timestamp(end_date))
@@ -483,8 +602,13 @@ async def fetch_price_history_range(
 
 
 async def fetch_quote(ticker: str) -> Optional[dict]:
-    """Fetch latest quote. yfinance PRIMARY → AV → Finnhub → Twelve Data."""
-    # Try yfinance first — derive quote from recent history
+    """Fetch latest quote. Tiingo -> yfinance -> AV -> Finnhub -> Twelve Data."""
+    # Try Tiingo first — derive quote from last 5 days of history
+    df = await _tiingo_history(ticker)
+    if df is not None and len(df) >= 2:
+        return _derive_quote_from_df(df.tail(5).reset_index(drop=True))
+
+    # Try yfinance — derive quote from recent history
     df = await _yfinance_history(ticker, period="5d")
     if df is not None and len(df) >= 2:
         return _derive_quote_from_df(df)
@@ -505,7 +629,7 @@ async def fetch_quote(ticker: str) -> Optional[dict]:
     return None
 
 
-async def fetch_quote_and_history(ticker: str) -> tuple[Optional[dict], Optional[pd.DataFrame]]:
+async def fetch_quote_and_history(ticker: str) -> tuple:
     """Fetch both quote and history in one call, minimizing API hits.
 
     Strategy: fetch history first (compact), derive quote from last row
@@ -523,3 +647,120 @@ async def fetch_quote_and_history(ticker: str) -> tuple[Optional[dict], Optional
         print(f"[market_data] Derived quote for {ticker} from history: ${quote['price']}")
 
     return quote, df
+
+
+# ── Raw indicator snapshot for Claude context injection ──────────────────────
+
+async def fetch_raw_indicator_snapshot(
+    ticker: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Optional[dict]:
+    """Fetch OHLCV and compute 30+ indicator values for Claude context injection."""
+    df = await fetch_price_history_range(ticker, start_date, end_date)
+    if df is None or len(df) < 40:
+        return None
+
+    data_source = "unknown"
+    # Determine which source was used based on cache key pattern
+    for prefix in ["tiingo", "eodhd", "yf", "av"]:
+        ck = f"{prefix}_{ticker}"
+        if any(ck in k for k in _cache.keys()):
+            data_source = prefix
+            break
+
+    # Compute indicators using ta library
+    snapshot = {}
+    try:
+        import ta as ta_lib
+        import numpy as np
+        df_ta = df.copy()
+        df_ta = ta_lib.add_all_ta_features(df_ta, open="open", high="high", low="low", close="close", volume="volume", fillna=True)
+        last = df_ta.iloc[-1]
+
+        # Map ta column names to clean names
+        indicator_map = {
+            "momentum_rsi": "rsi_14",
+            "trend_macd": "macd_line",
+            "trend_macd_signal": "macd_signal",
+            "trend_macd_diff": "macd_histogram",
+            "volatility_bbh": "bb_upper",
+            "volatility_bbl": "bb_lower",
+            "volatility_bbm": "bb_middle",
+            "volatility_bbw": "bb_width",
+            "volatility_bbp": "bb_pctb",
+            "volatility_atr": "atr_14",
+            "trend_adx": "adx_14",
+            "volume_obv": "obv",
+            "momentum_stoch": "stoch_k",
+            "momentum_stoch_signal": "stoch_d",
+            "momentum_cci": "cci_20",
+            "momentum_wr": "williams_r",
+            "volume_mfi": "mfi_14",
+            "trend_ema_fast": "ema_12",
+            "trend_sma_fast": "sma_20",
+            "trend_sma_slow": "sma_50",
+            "momentum_roc": "roc_12",
+            "volatility_kch": "keltner_upper",
+            "volatility_kcl": "keltner_lower",
+            "trend_vortex_ind_pos": "vortex_pos",
+            "trend_vortex_ind_neg": "vortex_neg",
+            "trend_psar_up": "psar_up",
+            "trend_psar_down": "psar_down",
+            "volume_cmf": "cmf",
+            "volume_vwap": "vwap",
+            "trend_ichimoku_a": "ichimoku_a",
+            "trend_ichimoku_b": "ichimoku_b",
+        }
+        for ta_col, clean_name in indicator_map.items():
+            if ta_col in df_ta.columns:
+                val = last[ta_col]
+                if isinstance(val, (int, float)) and not (val != val):  # not NaN
+                    snapshot[clean_name] = round(float(val), 4)
+
+        # Add EMA 20/50/200 manually
+        from app.indicators.technical import sma, ema
+        close = df["close"]
+        for p in [20, 50, 200]:
+            e = ema(close, p)
+            s = sma(close, p)
+            if len(e) > 0:
+                v = float(e.iloc[-1])
+                if v == v:
+                    snapshot[f"ema_{p}"] = round(v, 4)
+            if len(s) > 0:
+                v = float(s.iloc[-1])
+                if v == v:
+                    snapshot[f"sma_{p}"] = round(v, 4)
+
+        # Volatility
+        from app.indicators.technical import rolling_volatility
+        vol = rolling_volatility(close, 20)
+        if len(vol) > 0:
+            v = float(vol.iloc[-1])
+            if v == v:
+                snapshot["volatility_20d"] = round(v, 4)
+
+    except Exception as e:
+        print(f"[indicator_snapshot] ta compute error: {e}")
+        snapshot = {}
+
+    # Last 5 OHLCV bars
+    ohlcv_rows = []
+    for _, row in df.tail(5).iterrows():
+        ohlcv_rows.append({
+            "date": str(row["date"])[:10] if "date" in df.columns else "",
+            "open": round(float(row["open"]), 2),
+            "high": round(float(row["high"]), 2),
+            "low": round(float(row["low"]), 2),
+            "close": round(float(row["close"]), 2),
+            "volume": int(row["volume"]),
+        })
+
+    return {
+        "ticker": ticker,
+        "bar_count": len(df),
+        "data_source": data_source,
+        "ohlcv_rows": ohlcv_rows,
+        "indicator_snapshot": snapshot,
+    }
