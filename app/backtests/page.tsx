@@ -3,11 +3,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Bookmark, BookmarkCheck, ChevronDown, SlidersHorizontal, Check, Search } from "lucide-react";
-import { getBacktestResults, getStrategyList, runCustomStrategy, searchCompanies } from "@/lib/api";
+import { getBacktestResults, getStrategyList, runCustomStrategy, searchCompanies, getIndicatorCatalog } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   BacktestSummaryResponse, BacktestModelResult,
-  StrategyRegistry, SavedStrategy
+  StrategyRegistry, SavedStrategy, IndicatorCatalog
 } from "@/types/backtest";
 import type { CompanySearchResult } from "@/types/universe";
 import PerformanceChart from "@/components/backtest/PerformanceChart";
@@ -17,6 +17,8 @@ import StrategyChat from "@/components/backtest/StrategyChat";
 const CATEGORY_COLORS: Record<string, string> = {
   "Trend": "#00d4ff", "Oscillator": "#8b5cf6", "Volatility": "#22c55e",
   "Volume": "#f59e0b", "Confluence": "#ec4899", "Momentum": "#f97316", "Benchmark": "#6b7280",
+  "Mean Reversion": "#e879f9", "Risk": "#ef4444", "Market Structure": "#34d399",
+  "Breadth": "#fbbf24", "Baseline": "#94a3b8",
 };
 const CUSTOM_COLORS = ["#a855f7", "#14b8a6", "#f43f5e", "#84cc16", "#06b6d4", "#fb923c"];
 
@@ -109,8 +111,15 @@ function IndicatorDropdown({ registry, activeKeys, onToggle, onSelectAll, onClea
                           style={isActive ? { backgroundColor: color } : undefined}>
                           {isActive && <Check className="h-2.5 w-2.5 text-black" strokeWidth={3} />}
                         </div>
-                        <div className="flex-1">
-                          <span className="text-[11px] font-medium text-text-secondary">{s.name}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-medium text-text-secondary">{s.name}</span>
+                            {s.key.startsWith("catalog_") && (
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold uppercase tracking-wide flex-shrink-0">
+                                DATA
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-text-muted line-clamp-1">{s.description}</p>
                         </div>
                       </button>
@@ -244,16 +253,36 @@ export default function BacktestPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [registry, setRegistry] = useState<StrategyRegistry>({});
+  const [indicatorCatalog, setIndicatorCatalog] = useState<IndicatorCatalog>({});
   const [activeIndicators, setActiveIndicators] = useState<string[]>([
     "rsi_mean_rev", "macd_trend", "bollinger_squeeze", "atr_channel", "rsi_macd_conf", "buy_hold"
   ]);
 
-  useEffect(() => { getStrategyList().then(setRegistry).catch(console.error); }, []);
+  useEffect(() => {
+    getStrategyList().then(setRegistry).catch(console.error);
+    getIndicatorCatalog().then(setIndicatorCatalog).catch(console.error);
+  }, []);
 
   const allModels = [
     ...(data?.models.filter(m => activeIndicators.includes(m.strategyKey ?? "")) ?? []),
     ...customModels,
   ];
+
+  // Merge strategy registry + indicator catalog for the dropdown
+  const dropdownRegistry: StrategyRegistry = {
+    ...registry,
+    ...Object.fromEntries(
+      Object.entries(indicatorCatalog).map(([key, entry]) => [
+        `catalog_${key}`,
+        {
+          name: entry.display_name,
+          category: entry.category,
+          description: entry.description,
+          defaultParams: entry.parameters ?? {},
+        }
+      ])
+    )
+  };
 
   const runBacktest = useCallback(async () => {
     if (!tickerInput.trim()) return;
@@ -305,12 +334,12 @@ export default function BacktestPage() {
     setActiveIndicators(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   }
   function selectAll(cat?: string) {
-    const keys = Object.entries(registry).filter(([, e]) => !cat || e.category === cat).map(([k]) => k);
+    const keys = Object.entries(dropdownRegistry).filter(([, e]) => !cat || e.category === cat).map(([k]) => k);
     setActiveIndicators(prev => Array.from(new Set([...prev, ...keys])));
   }
   function clearAll(cat?: string) {
     if (!cat) { setActiveIndicators([]); return; }
-    const catKeys = new Set(Object.entries(registry).filter(([, e]) => e.category === cat).map(([k]) => k));
+    const catKeys = new Set(Object.entries(dropdownRegistry).filter(([, e]) => e.category === cat).map(([k]) => k));
     setActiveIndicators(prev => prev.filter(k => !catKeys.has(k)));
   }
 
@@ -371,23 +400,36 @@ export default function BacktestPage() {
             ))}
           </div>
 
-          {/* Custom strategies above indicators */}
-          {customModels.length > 0 && (
-            <div className="pt-1">
-              <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Custom Strategies</p>
+          {/* AI Strategies — always visible */}
+          <div className="pt-1">
+            <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">AI Strategies</p>
+            {customModels.length === 0 ? (
+              <div className="px-3 py-2.5 rounded-lg border border-dashed border-white/[0.06] flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-white/10 flex-shrink-0" />
+                <span className="text-[10px] text-[#3a3a4a] italic">
+                  Your Strategy #1 will appear here
+                </span>
+              </div>
+            ) : (
               <div className="space-y-1">
                 {customModels.map((m, i) => {
                   const color = CUSTOM_COLORS[i % CUSTOM_COLORS.length];
                   const isSaved = savedStrategies.some(s => s.label === m.modelName);
                   return (
                     <div key={m.customLabel ?? i}
-                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] cursor-pointer hover:bg-white/[0.05] transition-colors"
+                      onClick={() => {
+                        const idx = allModels.findIndex(am => am.customLabel === m.customLabel);
+                        if (idx >= 0) setSelectedIdx(idx);
+                      }}
+                    >
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                      <span className="text-[11px] font-semibold flex-1 text-text-primary">{m.customLabel ?? m.modelName}</span>
-                      <span className={cn("text-[10px] font-bold", m.cumulativeReturn >= 0 ? "text-success" : "text-danger")}>
+                      <span className="text-[11px] font-semibold flex-1 text-text-primary truncate">{m.customLabel ?? m.modelName}</span>
+                      <span className={cn("text-[10px] font-bold flex-shrink-0", m.cumulativeReturn >= 0 ? "text-success" : "text-danger")}>
                         {m.cumulativeReturn >= 0 ? "+" : ""}{(m.cumulativeReturn*100).toFixed(1)}%
                       </span>
-                      <button onClick={() => {
+                      <button onClick={e => {
+                        e.stopPropagation();
                         const saved: SavedStrategy = {
                           id: `${Date.now()}`, label: m.customLabel ?? m.modelName,
                           strategyKey: m.strategyKey ?? "", params: m.params ?? {},
@@ -396,19 +438,22 @@ export default function BacktestPage() {
                         setSavedStrategies(prev => [saved, ...prev]);
                         try { localStorage.setItem("blackgrid_saved_strategies", JSON.stringify([saved, ...savedStrategies])); } catch {}
                       }} disabled={isSaved}
-                        className="text-gray-600 hover:text-accent disabled:text-accent transition-colors">
+                        className="text-gray-600 hover:text-accent disabled:text-accent transition-colors flex-shrink-0">
                         {isSaved ? <BookmarkCheck className="h-3 w-3" /> : <Bookmark className="h-3 w-3" />}
                       </button>
-                      <button onClick={() => setCustomModels(prev => prev.filter((_, j) => j !== i))}
-                        className="text-gray-600 hover:text-danger transition-colors">
+                      <button onClick={e => {
+                        e.stopPropagation();
+                        setCustomModels(prev => prev.filter((_, j) => j !== i));
+                      }}
+                        className="text-gray-600 hover:text-danger transition-colors flex-shrink-0">
                         <X className="h-3 w-3" />
                       </button>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {data && (
             <p className="text-[10px] text-text-muted text-center">
@@ -437,8 +482,8 @@ export default function BacktestPage() {
 
         {/* Top bar: indicator dropdown + active pills */}
         <div className="px-4 pt-3 pb-2 border-b border-white/[0.04] flex items-center gap-3">
-          {Object.keys(registry).length > 0 && (
-            <IndicatorDropdown registry={registry} activeKeys={activeIndicators}
+          {Object.keys(dropdownRegistry).length > 0 && (
+            <IndicatorDropdown registry={dropdownRegistry} activeKeys={activeIndicators}
               onToggle={toggleIndicator} onSelectAll={selectAll} onClearAll={clearAll} />
           )}
           <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
@@ -446,7 +491,7 @@ export default function BacktestPage() {
               <span className="text-[11px] text-text-muted italic">No indicators selected</span>
             )}
             {activeIndicators.map(key => {
-              const entry = registry[key]; if (!entry) return null;
+              const entry = dropdownRegistry[key]; if (!entry) return null;
               const color = CATEGORY_COLORS[entry.category] ?? "#00d4ff";
               return (
                 <span key={key} onClick={() => toggleIndicator(key)}

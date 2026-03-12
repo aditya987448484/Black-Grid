@@ -140,6 +140,7 @@ export interface IndicatorCatalogEntry {
   supported_operators: string[];
   required_fields: string[];
   output_type: string;
+  data_source?: string;
 }
 
 export type IndicatorCatalog = Record<string, IndicatorCatalogEntry>;

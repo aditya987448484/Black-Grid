@@ -236,7 +236,7 @@ Use the indicator values above to:
 
 @router.get("/indicator-catalog")
 async def indicator_catalog():
-    """Return the full 100-indicator catalog for the frontend."""
+    """Return the full 100-indicator catalog. Computed from Tiingo/EODHD/yfinance OHLCV data."""
     return {
         key: {
             "key": key,
@@ -247,6 +247,7 @@ async def indicator_catalog():
             "supported_operators": v.get("supported_operators", []),
             "required_fields": v.get("required_fields", []),
             "output_type": v.get("output_type", "line"),
+            "data_source": "tiingo_eodhd",
         }
         for key, v in INDICATOR_CATALOG.items()
     }

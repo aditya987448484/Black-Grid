@@ -55,6 +55,7 @@ interface EnhancedMessage extends ChatStrategyMessage {
   validationErrors?: string[];
   validationWarnings?: string[];
   phase?: "parsing" | "parsed" | "validating" | "validated" | "running" | "complete" | "error";
+  imported?: boolean;
 }
 
 export default function StrategyChat({
@@ -94,6 +95,7 @@ export default function StrategyChat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const strategyCounterRef = useRef(0);
 
   const currentModel = ANTHROPIC_MODELS.find(m => m.id === model) || ANTHROPIC_MODELS[1];
 
@@ -196,62 +198,42 @@ export default function StrategyChat({
     setTimeout(() => setCopiedIdx(null), 1500);
   }
 
-  // ── Run a parsed strategy spec ──────────────────────────────────────
-  const runParsedSpec = useCallback(async (spec: StrategySpec, msgIdx: number) => {
+  // ── Run a parsed strategy spec with explicit label ─────────────────
+  const runParsedSpecWithLabel = useCallback(async (spec: StrategySpec, msgIdx: number, label: string) => {
     setChatLoading(true);
     setCurrentPhase("run");
-
-    // Update message phase
     setMessages(prev => prev.map((m, i) => i === msgIdx ? { ...m, phase: "validating" } : m));
 
     try {
-      // Validate
       const validation = await validateStrategy(spec);
-      setMessages(prev => prev.map((m, i) => i === msgIdx ? {
-        ...m,
-        validationErrors: validation.errors,
-        validationWarnings: validation.warnings,
-        phase: validation.valid ? "validated" : "error",
-      } : m));
-
       if (!validation.valid) {
+        setMessages(prev => prev.map((m, i) => i === msgIdx ? {
+          ...m, phase: "error", validationErrors: validation.errors, validationWarnings: validation.warnings,
+        } : m));
         setChatLoading(false);
         return;
       }
 
-      // Run
       setMessages(prev => prev.map((m, i) => i === msgIdx ? { ...m, phase: "running" } : m));
       const runResult = await runStrategySpec({
-        strategy_spec: spec,
-        ticker,
-        start_date: startDate,
-        end_date: endDate,
+        strategy_spec: spec, ticker, start_date: startDate, end_date: endDate,
       });
 
       if (runResult.error) {
         setMessages(prev => prev.map((m, i) => i === msgIdx ? {
-          ...m,
-          phase: "error",
-          validationErrors: [...(m.validationErrors ?? []), runResult.error!],
+          ...m, phase: "error", validationErrors: [...(m.validationErrors ?? []), runResult.error!],
         } : m));
       } else if (runResult.result) {
         const result = runResult.result as BacktestModelResult;
-        const label = `Your Strategy #${customResults.length + 1}`;
         result.isCustom = true;
         result.customLabel = label;
         result.modelName = label;
         setMessages(prev => prev.map((m, i) => i === msgIdx ? {
-          ...m,
-          strategyResult: result,
-          phase: "complete",
+          ...m, strategyResult: result, phase: "complete", imported: true,
         } : m));
-
-        // Push to parent
         onRunStrategy(
           result.strategyKey ?? `custom_${spec.name.toLowerCase().replace(/ /g, "_")}`,
-          {},
-          label,
-          result,
+          result.params ?? {}, label, result,
         );
       }
     } catch (e: unknown) {
@@ -263,6 +245,33 @@ export default function StrategyChat({
       setChatLoading(false);
     }
   }, [ticker, startDate, endDate, onRunStrategy]);
+
+  // ── Auto-run shortcut (used by auto-run on parse) ─────────────────
+  const runParsedSpec = useCallback(async (spec: StrategySpec, msgIdx: number) => {
+    strategyCounterRef.current += 1;
+    const label = `Your Strategy #${strategyCounterRef.current}`;
+    return runParsedSpecWithLabel(spec, msgIdx, label);
+  }, [runParsedSpecWithLabel]);
+
+  // ── Import strategy from spec card ────────────────────────────────
+  function importStrategy(msg: EnhancedMessage, msgIdx: number) {
+    if (msg.strategyResult) {
+      strategyCounterRef.current += 1;
+      const label = `Your Strategy #${strategyCounterRef.current}`;
+      const result = { ...msg.strategyResult } as BacktestModelResult;
+      result.isCustom = true;
+      result.customLabel = label;
+      result.modelName = label;
+      onRunStrategy(result.strategyKey ?? "custom", result.params ?? {}, label, result);
+      setMessages(prev => prev.map((m, i) => i === msgIdx ? { ...m, imported: true } : m));
+      return;
+    }
+    if (msg.strategySpec) {
+      strategyCounterRef.current += 1;
+      const label = `Your Strategy #${strategyCounterRef.current}`;
+      runParsedSpecWithLabel(msg.strategySpec, msgIdx, label);
+    }
+  }
 
   // ── Main submit: parse strategy via Claude, then auto-run ───────────
   const submit = useCallback(async (text?: string) => {
@@ -341,7 +350,8 @@ export default function StrategyChat({
 
           if (legacyResult.strategy_key && legacyResult.strategyResult) {
             const r = legacyResult.strategyResult as BacktestModelResult;
-            const label = `Your Strategy #${customResults.length + 1}`;
+            strategyCounterRef.current += 1;
+            const label = `Your Strategy #${strategyCounterRef.current}`;
             r.isCustom = true;
             r.customLabel = label;
             r.modelName = label;
@@ -524,12 +534,11 @@ export default function StrategyChat({
           )}
 
           {/* Phase indicator */}
-          {msg.phase && msg.phase !== "complete" && msg.phase !== "error" && (
+          {msg.phase && !["complete", "error", "parsed"].includes(msg.phase) && (
             <div className="flex items-center gap-2 text-[10px] text-accent">
               <Loader2 className="h-3 w-3 animate-spin" />
               <span>
                 {msg.phase === "parsing" && "Parsing..."}
-                {msg.phase === "parsed" && "Parsed — ready to run"}
                 {msg.phase === "validating" && "Validating..."}
                 {msg.phase === "validated" && "Validated — running backtest..."}
                 {msg.phase === "running" && "Running backtest..."}
@@ -537,21 +546,48 @@ export default function StrategyChat({
             </div>
           )}
 
-          {/* Run button (if not auto-running and no result yet) */}
-          {msg.phase === "parsed" && !msg.strategyResult && !chatLoading && (
-            <button
-              onClick={() => runParsedSpec(spec, msgIdx)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/15 text-accent text-[11px] font-semibold hover:bg-accent/25 transition-colors"
-            >
-              <Play className="h-3 w-3" /> Run Backtest
-            </button>
+          {/* Import Strategy CTA — shown when parsed OR complete */}
+          {(msg.phase === "parsed" || msg.phase === "complete") && (
+            <div className="flex items-center gap-2 pt-1">
+              {!msg.imported ? (
+                <button
+                  onClick={() => importStrategy(msg, msgIdx)}
+                  disabled={chatLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-background text-[11px] font-bold hover:bg-accent/80 disabled:opacity-40 transition-all"
+                >
+                  <Play className="h-3 w-3" />
+                  {msg.strategyResult ? "Import Strategy" : "Run & Import Strategy"}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>
+                    Imported as <span className="font-bold">{msg.strategyResult?.customLabel ?? "Your Strategy"}</span>
+                    {" — visible in left panel & chart"}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Completed checkmark */}
-          {msg.phase === "complete" && (
-            <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-              <CheckCircle2 className="h-3 w-3" />
-              <span>Strategy compiled and executed successfully</span>
+          {/* Error state with retry */}
+          {msg.phase === "error" && msg.validationErrors && msg.validationErrors.length > 0 && (
+            <div className="text-[10px] text-red-400 space-y-0.5">
+              {msg.validationErrors.map((e, i) => (
+                <div key={i} className="flex items-start gap-1.5">
+                  <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                  <span>{e}</span>
+                </div>
+              ))}
+              <button
+                onClick={() => msg.strategySpec && runParsedSpecWithLabel(
+                  msg.strategySpec, msgIdx,
+                  `Your Strategy #${strategyCounterRef.current + 1}`
+                )}
+                className="mt-1 text-[10px] text-accent hover:underline"
+              >
+                Retry
+              </button>
             </div>
           )}
         </div>
