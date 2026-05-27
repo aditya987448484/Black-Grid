@@ -7,6 +7,7 @@ import logging
 
 from app.schemas.schemas import (
     AssetDetail,
+    AssetType,
     TechnicalDataResponse,
     ForecastResponse,
     ModelForecastOutput,
@@ -18,6 +19,7 @@ from app.services.mock_data import (
     get_mock_asset_detail,
     get_mock_technical_data,
 )
+from app.services.price_service import get_price
 from app.services.forecast_service import ForecastService
 from app.api.service_factory import ServiceFactory
 
@@ -34,53 +36,44 @@ async def get_asset_detail(
     ticker: str = Path(..., min_length=1, max_length=10, description="Asset ticker symbol")
 ) -> AssetDetail:
     """
-    Get detailed asset information including price, market cap, and fundamentals
-    
-    Parameters:
-    - ticker: Asset ticker symbol (e.g., AAPL, MSFT, SPY)
-    
-    Returns:
-    - Current price and changes
-    - Market cap and shares outstanding
-    - P/E ratio, dividend yield
-    - 52-week high/low
-    
-    Uses real data provider (Alpha Vantage) if configured, otherwise mock data
+    Get detailed asset information including price, market cap, and fundamentals.
+
+    Uses yfinance for real-time price (with Alpha Vantage and mock fallbacks),
+    and merges in mock fundamentals (PE, dividend, 52-week range, etc.) for
+    fields not readily available from the price feed.
     """
     try:
-        service = ServiceFactory.get_market_data_service()
-        
-        # Try to fetch real quote data
+        symbol = ticker.upper()
+
+        # ── Real-time price (yfinance → AV → mock) ───────────────────────────
+        price_data = await get_price(symbol)
+
+        # ── Mock fundamentals for the remaining fields ────────────────────────
         try:
-            quote_data = await service.get_current_quote(ticker.upper())
-            
-            # Extract from quote data
-            global_quote = quote_data.get("Global Quote", {})
-            if global_quote:
-                detail = {
-                    "data": {
-                        "ticker": ticker.upper(),
-                        "name": f"{ticker.upper()} Inc.",
-                        "price": float(global_quote.get("05. price", 0)),
-                        "change": float(global_quote.get("09. change", 0)),
-                        "change_percent": float(global_quote.get("10. change percent", "0").rstrip("%") or 0),
-                        "market_cap": 2500000000000,  # From mock
-                        "pe_ratio": 25.5,
-                        "dividend_yield": 0.45,
-                        "high_52w": 200.0,
-                        "low_52w": 120.0,
-                        "avg_volume": int(global_quote.get("06. volume", 0)),
-                    }
-                }
-                return AssetDetail(**detail["data"])
-        except Exception as e:
-            logger.warning(f"Real data fetch failed for {ticker}: {str(e)}")
-        
-        # Fall back to mock data
-        logger.info(f"Using mock data for {ticker}")
-        response = get_mock_asset_detail(ticker)
-        return AssetDetail(**response["data"])
-    
+            mock_resp = get_mock_asset_detail(symbol)
+            mock = mock_resp.get("data", {})
+        except Exception:
+            mock = {}
+
+        # Detect asset type: ETFs end in common patterns, else default to stock
+        etf_tickers = {"SPY", "QQQ", "IWM", "GLD", "SLV", "TLT", "VIX", "DIA", "XLF", "XLE"}
+        asset_type = AssetType.ETF if symbol in etf_tickers else AssetType.STOCK
+
+        return AssetDetail(
+            ticker=symbol,
+            name=mock.get("name", f"{symbol} Inc."),
+            asset_type=asset_type,
+            price=price_data["price"],
+            market_cap=mock.get("market_cap"),
+            pe_ratio=mock.get("pe_ratio"),
+            dividend_yield=mock.get("dividend_yield"),
+            fifty_two_week_high=mock.get("fifty_two_week_high", price_data["price"] * 1.20),
+            fifty_two_week_low=mock.get("fifty_two_week_low", price_data["price"] * 0.75),
+            avg_volume=mock.get("avg_volume"),
+        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting asset detail for {ticker}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch asset details")
