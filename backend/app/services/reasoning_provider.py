@@ -132,6 +132,60 @@ class DeepSeekReasoningProvider(ReasoningProvider):
             logger.error(f"DeepSeek reasoning error: {str(e)}")
             raise
 
+    async def chat_messages(
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 8192,
+        temperature: float = 0.3,
+    ) -> str:
+        """
+        Send a fully-formed messages array directly to the DeepSeek
+        completions endpoint, preserving the system prompt and all
+        prior turns exactly as supplied.
+
+        Args:
+            messages:    List of {"role": "system"|"user"|"assistant",
+                                  "content": "..."}
+                         The caller is responsible for prepending the
+                         system message if desired.
+            max_tokens:  Maximum tokens in the reply.
+            temperature: Sampling temperature.
+
+        Returns:
+            Assistant reply as plain text.
+        """
+        if not self.api_key:
+            raise ValueError("DeepSeek API key not configured")
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "top_p": 0.9,
+            }
+
+            response = await self.client.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+
+            result = response.json()
+            if result.get("choices") and len(result["choices"]) > 0:
+                return result["choices"][0]["message"]["content"]
+            raise ValueError("No response from DeepSeek API")
+
+        except Exception as e:
+            logger.error(f"DeepSeek chat_messages error: {str(e)}")
+            raise
+
     async def analyze(
         self,
         analysis_type: AnalysisType,

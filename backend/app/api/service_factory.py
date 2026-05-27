@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.services.market_data import MarketDataService, MockMarketDataProvider
 from app.services.macro_data import MacroDataService, MockMacroDataProvider
 from app.services.sec_data import SECDataService, MockSECDataProvider
-from app.services.reasoning_provider import GroqReasoningProvider
+from app.services.reasoning_provider import DeepSeekReasoningProvider, GroqReasoningProvider
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +78,10 @@ class ServiceFactory:
     @staticmethod
     def get_reasoning_service():
         """
-        Get a reasoning service wrapper with a `.provider` attribute pointing to
-        GroqReasoningProvider (if GROQ_API_KEY is set) or MockReasoningProvider.
+        Get a reasoning service wrapper with a `.provider` attribute.
 
-        Works around the double-__init__ issue in GroqReasoningProvider by
-        constructing the provider with a mock inner and then patching the
-        Groq-specific attributes directly.
+        Priority: DeepSeek → Groq → Mock
+        Controlled by REASONING_PROVIDER env var (default: "deepseek").
         """
         settings = get_settings()
         from app.services.reasoning_provider import MockReasoningProvider
@@ -93,6 +91,18 @@ class ServiceFactory:
             def __init__(self, provider):
                 self.provider = provider
 
+        preferred = (settings.reasoning_provider or "deepseek").lower()
+
+        # ── DeepSeek (primary) ────────────────────────────────────────────────
+        if preferred == "deepseek" and settings.deepseek_api_key:
+            try:
+                provider = DeepSeekReasoningProvider()
+                logger.debug("Using DeepSeek reasoning provider")
+                return _ReasoningService(provider)
+            except Exception as e:
+                logger.warning(f"Failed to initialize DeepSeek provider: {e}. Trying Groq.")
+
+        # ── Groq (fallback) ───────────────────────────────────────────────────
         if settings.groq_api_key:
             try:
                 import httpx
@@ -108,6 +118,15 @@ class ServiceFactory:
                 return _ReasoningService(provider)
             except Exception as e:
                 logger.warning(f"Failed to initialize Groq provider: {e}. Using mock.")
+
+        # ── Auto-fallback: try DeepSeek even if not "preferred" ───────────────
+        if settings.deepseek_api_key:
+            try:
+                provider = DeepSeekReasoningProvider()
+                logger.debug("Falling back to DeepSeek reasoning provider")
+                return _ReasoningService(provider)
+            except Exception as e:
+                logger.warning(f"DeepSeek fallback failed: {e}. Using mock.")
 
         logger.debug("Using mock reasoning provider")
         return _ReasoningService(MockReasoningProvider())

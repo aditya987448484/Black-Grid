@@ -1,6 +1,6 @@
 'use client';
 
-import { TrendingUp, TrendingDown, CheckCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 import type { BacktestResult } from '@/lib/types';
 
 interface BacktestResultCardProps {
@@ -63,7 +63,6 @@ function SecondaryMetricRow({
 
 export function BacktestResultCard({ result }: BacktestResultCardProps) {
   const isPositive = result.total_return >= 0;
-  const ReturnIcon = isPositive ? TrendingUp : TrendingDown;
 
   const statusBadge = {
     completed: {

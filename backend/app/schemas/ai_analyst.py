@@ -19,7 +19,7 @@ class AttachmentMeta(BaseModel):
 class AiAnalystRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "deepseek-chat"
     attachments: list[AttachmentMeta] = []
 
 

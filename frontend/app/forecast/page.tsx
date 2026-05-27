@@ -40,7 +40,7 @@ export default function ForecastPage() {
   const models = forecastData?.models || [];
 
   const consensus = forecastData?.consensus;
-  const averageConfidence = consensus?.confidence ?? 0;
+  const averageConfidence = consensus?.average_confidence ?? 0;
   const averageReturn = consensus?.average_return ?? 0;
 
   return (
@@ -111,12 +111,12 @@ export default function ForecastPage() {
                 <p className="text-xs text-muted-foreground font-semibold uppercase">Model Consensus</p>
                 <div className="flex items-end gap-2">
                   <p className="text-3xl font-bold bg-gradient-to-r from-success to-cyan-500 bg-clip-text text-transparent">
-                    {consensus?.signal || '—'}
+                    {consensus?.consensus_signal || '—'}
                   </p>
-                  <p className="text-sm text-muted-foreground mb-1">{Math.round(consensus?.confidence ?? 0)}%</p>
+                  <p className="text-sm text-muted-foreground mb-1">{Math.round(consensus?.average_confidence ?? 0)}%</p>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {(consensus?.agreement_rate ?? 0) > 66 ? 'High' : 'Moderate'} agreement across models
+                  {consensus?.model_agreement || 'Moderate agreement across models'}
                 </p>
               </div>
 
@@ -149,7 +149,7 @@ export default function ForecastPage() {
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground font-semibold uppercase">Best Model (Accuracy)</p>
                 <p className="text-lg font-bold text-foreground">
-                  {models.length > 0 ? models[0].modelName : '—'}
+                  {models.length > 0 ? models[0].model_name : '—'}
                 </p>
                 <p className="text-xs text-muted-foreground">{(models[0]?.accuracy ?? 0).toFixed(1)}% backtest accuracy</p>
               </div>
@@ -167,8 +167,17 @@ export default function ForecastPage() {
             </>
           ) : (
             models.map((model, idx) => (
-              <div key={model.modelName} className="animate-in-up" style={{ animationDelay: `${150 + idx * 50}ms` }}>
-                <ForecastCard {...model} />
+              <div key={model.model_name} className="animate-in-up" style={{ animationDelay: `${150 + idx * 50}ms` }}>
+                <ForecastCard
+                  modelName={model.model_name}
+                  modelType={model.model_type}
+                  signal={model.signal}
+                  expectedReturn={model.expected_return}
+                  confidence={model.confidence}
+                  status={model.status}
+                  accuracy={model.accuracy ?? undefined}
+                  description={model.description}
+                />
               </div>
             ))
           )}
@@ -211,10 +220,10 @@ export default function ForecastPage() {
                             ? 'text-destructive'
                             : 'text-warning';
                       return (
-                        <tr key={model.modelName} className="border-b border-border/20 hover:bg-surface-secondary/20 transition-colors">
+                        <tr key={model.model_name} className="border-b border-border/20 hover:bg-surface-secondary/20 transition-colors">
                           <td className="py-3 px-4">
                             <div>
-                              <p className="font-semibold text-foreground">{model.modelName}</p>
+                              <p className="font-semibold text-foreground">{model.model_name}</p>
                               <p className="text-xs text-muted-foreground line-clamp-2">{model.description}</p>
                             </div>
                           </td>
@@ -223,8 +232,8 @@ export default function ForecastPage() {
                               {model.signal}
                             </span>
                           </td>
-                          <td className={`py-3 px-4 text-center font-semibold ${model.expectedReturn > 0 ? 'text-success' : 'text-destructive'}`}>
-                            {model.expectedReturn > 0 ? '+' : ''}{model.expectedReturn.toFixed(2)}%
+                          <td className={`py-3 px-4 text-center font-semibold ${model.expected_return > 0 ? 'text-success' : 'text-destructive'}`}>
+                            {model.expected_return > 0 ? '+' : ''}{model.expected_return.toFixed(2)}%
                           </td>
                           <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-2">
@@ -238,7 +247,7 @@ export default function ForecastPage() {
                             </div>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <span className="font-semibold text-foreground">{model.accuracy.toFixed(1)}%</span>
+                            <span className="font-semibold text-foreground">{(model.accuracy ?? 0).toFixed(1)}%</span>
                           </td>
                           <td className="py-3 px-4 text-center">
                             <span

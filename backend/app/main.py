@@ -39,10 +39,20 @@ app = FastAPI(
 # MIDDLEWARE SETUP
 # ============================================================================
 
+# Build a comprehensive CORS allow-list that covers every port Next.js
+# might pick (3000–3005) so the browser never blocks a dev request even
+# if the default port is already taken.
+_cors = list(settings.backend_cors_origins)
+for _port in [3000, 3001, 3002, 3003, 3004, 3005]:
+    for _host in ["localhost", "127.0.0.1"]:
+        _o = f"http://{_host}:{_port}"
+        if _o not in _cors:
+            _cors.append(_o)
+
 # CORS Middleware - Allow frontend and other trusted origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.backend_cors_origins,
+    allow_origins=_cors,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -88,6 +98,10 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include API v1 routes
 app.include_router(api_router, prefix=settings.api_v1_str)
+
+# AI Analyst chat routes — router defines its own prefix (/api/ai-analyst)
+from app.api.routes_ai_analyst import router as ai_analyst_router  # noqa: E402
+app.include_router(ai_analyst_router)
 
 
 # ============================================================================

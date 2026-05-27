@@ -6,7 +6,7 @@
 export function MetricCard({
   label,
   value,
-  change,
+  change: _change,
   changePercent,
   icon,
   trend = 'neutral',

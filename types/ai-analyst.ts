@@ -1,6 +1,7 @@
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  timestamp?: string;
 }
 
 export interface QuotePayload {
@@ -58,3 +59,18 @@ export const ANTHROPIC_MODELS: ModelOption[] = [
   { id: "claude-sonnet-4-20250514", label: "Sonnet 4", badge: "" },
   { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", badge: "Fastest" },
 ];
+
+// ── DeepSeek models (primary LLM) ──────────────────────────────────────────
+
+export interface AIAnalystModel {
+  id: string;
+  label: string;
+  badge?: string;
+}
+
+export const DEEPSEEK_MODELS: AIAnalystModel[] = [
+  { id: "deepseek-chat", label: "DeepSeek V3", badge: "Recommended" },
+  { id: "deepseek-reasoner", label: "DeepSeek R1", badge: "Deep reasoning" },
+];
+
+export const DEFAULT_AI_MODEL = "deepseek-chat";

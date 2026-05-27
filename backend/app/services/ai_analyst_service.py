@@ -20,6 +20,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.services.reasoning_provider import DeepSeekReasoningProvider
+from app.schemas.ai_analyst import AiAnalystResponse
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +79,14 @@ class AIAnalystService:
         original_model = self._provider.model
         self._provider.model = effective_model
         try:
-            # Build the full message list with system prompt prepended
-            full_system = system or SYSTEM_PROMPT
-            # DeepSeekReasoningProvider.reason() prepends a fixed system message;
-            # we use a single user message carrying the full context instead.
-            combined_user = "\n\n".join(
-                f"[{m['role'].upper()}]: {m['content']}" for m in messages
-            )
-            reply = await self._provider.reason(
-                combined_user,
-                context=None,
+            # Build a proper OpenAI-style messages array so DeepSeek receives
+            # the full multi-turn context rather than a flattened string.
+            full_messages: List[Dict[str, str]] = [
+                {"role": "system", "content": system or SYSTEM_PROMPT},
+                *messages,
+            ]
+            reply = await self._provider.chat_messages(
+                full_messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
@@ -138,3 +137,80 @@ class AIAnalystService:
     async def close(self) -> None:
         """Release the underlying HTTP client."""
         await self._provider.close()
+
+
+async def process_analyst_chat(
+    message: str,
+    history: list,
+    model: str = "deepseek-chat",
+    attachments: list = None,
+) -> AiAnalystResponse:
+    """
+    Module-level entry point called by routes_ai_analyst.
+
+    Instantiates AIAnalystService, builds the message list (optionally
+    injecting attachment summaries), calls DeepSeek, and always tears
+    down the HTTP client in a finally block.
+
+    Returns an AiAnalystResponse — never raises to the caller.
+    """
+    service = AIAnalystService(model=model)
+    try:
+        # If attachments were uploaded, append a digest to the user turn
+        user_content = message
+        if attachments:
+            summaries = "\n".join(
+                f"- [{a.get('filename', 'file')}] {a.get('summary', '(no preview)')}"
+                for a in attachments
+            )
+            user_content = f"{message}\n\nAttached files:\n{summaries}"
+
+        messages: List[Dict[str, str]] = [
+            *history,
+            {"role": "user", "content": user_content},
+        ]
+
+        reply = await service.chat(messages, model=model)
+        return AiAnalystResponse(
+            reply=reply,
+            modelUsed=model,
+            disclaimer="For informational purposes only.",
+        )
+
+    except ValueError as exc:
+        # Typically: DeepSeek API key not configured
+        logger.warning("process_analyst_chat ValueError: %s", exc)
+        reply = (
+            "## API Key Required\n\n"
+            "The AI Analyst could not connect to DeepSeek because no API key is configured.\n\n"
+            "**To fix this:**\n"
+            "1. Open `backend/.env`\n"
+            "2. Add the line: `DEEPSEEK_API_KEY=your_key_here`\n"
+            "3. Get a free key at [platform.deepseek.com](https://platform.deepseek.com)\n"
+            "4. Restart the backend server\n"
+        )
+        return AiAnalystResponse(
+            reply=reply,
+            modelUsed=model,
+            disclaimer="",
+        )
+
+    except Exception as exc:
+        logger.exception("process_analyst_chat unexpected error: %s", exc)
+        reply = (
+            "## Something went wrong\n\n"
+            f"The analyst encountered an unexpected error: `{exc}`\n\n"
+            "**Backend checklist:**\n"
+            "- `DEEPSEEK_API_KEY` is set in `backend/.env`\n"
+            "- The backend server is running (`uvicorn app.main:app --reload`)\n"
+            "- DeepSeek API is reachable (check https://status.deepseek.com)\n"
+            "- Review backend logs for the full traceback\n"
+        )
+        return AiAnalystResponse(
+            reply=reply,
+            modelUsed=model,
+            disclaimer="",
+        )
+
+    finally:
+        await service.close()
