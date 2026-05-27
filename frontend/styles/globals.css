@@ -1,0 +1,281 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Premium Dark Theme */
+:root {
+  /* Backgrounds */
+  --background: 7 12% 5%;
+  --surface: 7 12% 8%;
+  --surface-secondary: 7 12% 11%;
+  --foreground: 200 10% 94%;
+  
+  /* Cards & Components */
+  --card: 7 12% 8%;
+  --card-foreground: 200 10% 94%;
+  --card-hover: 7 12% 12%;
+  
+  /* UI Elements */
+  --popover: 7 12% 8%;
+  --popover-foreground: 200 10% 94%;
+  --border: 200 15% 20%;
+  --input: 7 12% 11%;
+  --input-focus: 7 12% 14%;
+  
+  /* Status Colors */
+  --primary: 185 100% 50%;
+  --primary-foreground: 7 12% 5%;
+  --accent: 185 100% 50%;
+  --accent-foreground: 7 12% 5%;
+  
+  /* Semantic */
+  --success: 120 60% 45%;
+  --warning: 40 95% 50%;
+  --destructive: 0 80% 50%;
+  --destructive-foreground: 210 40% 98%;
+  
+  --muted: 200 15% 30%;
+  --muted-foreground: 200 10% 65%;
+  
+  /* Radius */
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+}
+
+/* Base Styles */
+* {
+  @apply border-border;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-background text-foreground;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography Hierarchy */
+@layer base {
+  h1 {
+    @apply text-4xl md:text-5xl font-bold tracking-tight;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+  
+  h2 {
+    @apply text-2xl md:text-3xl font-bold tracking-tight;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  
+  h3 {
+    @apply text-lg md:text-xl font-semibold tracking-tight;
+    line-height: 1.3;
+  }
+  
+  h4 {
+    @apply text-base md:text-lg font-semibold;
+    line-height: 1.4;
+  }
+  
+  p {
+    @apply text-foreground;
+    line-height: 1.6;
+  }
+  
+  a {
+    @apply text-primary transition-colors hover:text-primary/80;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(0, 200, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(0, 200, 255, 0.2);
+  }
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Utility Classes */
+@layer components {
+  .animate-in {
+    @apply animate-[fadeIn_0.5s_ease-out];
+  }
+  
+  .animate-in-up {
+    @apply animate-[slideInUp_0.5s_ease-out];
+  }
+  
+  .animate-in-down {
+    @apply animate-[slideInDown_0.5s_ease-out];
+  }
+  
+  .animate-in-left {
+    @apply animate-[slideInLeft_0.5s_ease-out];
+  }
+  
+  .glow {
+    animation: glow 3s ease-in-out infinite;
+  }
+  
+  .gradient-shift {
+    background-size: 200% 200%;
+    animation: gradientShift 8s ease infinite;
+  }
+  
+  /* Glass Morphism */
+  .glass {
+    @apply backdrop-blur-2xl bg-white/[0.07] border border-white/[0.1] shadow-[0_8px_32px_rgba(0,0,0,0.1)];
+  }
+  
+  .glass-hover {
+    @apply glass transition-all duration-300 hover:bg-white/[0.1] hover:border-white/[0.15] hover:shadow-[0_12px_40px_rgba(0,0,0,0.15)];
+  }
+  
+  .glass-subtle {
+    @apply backdrop-blur-lg bg-white/[0.04] border border-white/[0.08];
+  }
+  
+  /* Text Utilities */
+  .text-subtle {
+    @apply text-muted-foreground text-sm leading-relaxed;
+  }
+  
+  .text-label {
+    @apply text-xs font-semibold uppercase tracking-widest text-muted-foreground;
+    letter-spacing: 0.05em;
+  }
+  
+  .text-code {
+    font-family: 'JetBrains Mono', monospace;
+    @apply text-sm;
+  }
+  
+  .text-metric {
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+  }
+  
+  /* Spacing Helpers */
+  .space-y-tight {
+    @apply space-y-2;
+  }
+  
+  .space-x-tight {
+    @apply space-x-2;
+  }
+  
+  .section-spacing {
+    @apply space-y-8;
+  }
+  
+  .section-padding {
+    @apply px-8 py-8;
+  }
+  
+  /* Transitions */
+  .transition-smooth {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  .transition-fast {
+    @apply transition-all duration-150 ease-out;
+  }
+  
+  /* Shadows */
+  .shadow-premium {
+    @apply shadow-[0_4px_12px_rgba(0,0,0,0.08)];
+  }
+  
+  .shadow-premium-lg {
+    @apply shadow-[0_8px_24px_rgba(0,0,0,0.12)];
+  }
+  
+  .shadow-premium-hover {
+    @apply shadow-[0_12px_32px_rgba(0,200,255,0.08)];
+  }
+  
+  /* Button Base Styles */
+  .btn-base {
+    @apply inline-flex items-center justify-center font-medium transition-all duration-300 rounded-lg;
+  }
+  
+  .btn-primary {
+    @apply btn-base bg-gradient-to-r from-primary to-cyan-500 text-primary-foreground hover:shadow-[0_8px_24px_rgba(0,200,255,0.25)] active:shadow-[0_4px_12px_rgba(0,200,255,0.15)];
+  }
+  
+  .btn-secondary {
+    @apply btn-base bg-surface-secondary border border-border text-foreground hover:bg-surface-secondary/80 hover:border-border/80;
+  }
+}
