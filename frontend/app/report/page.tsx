@@ -308,7 +308,10 @@ export default function ReportPage() {
     if (searchTicker.trim()) setSelectedTicker(searchTicker.trim().toUpperCase());
   };
 
-  const upsideColor = reportData && reportData.final_rating.price_upside >= 0 ? 'text-success' : 'text-destructive';
+  const upsideColor =
+    reportData?.final_rating?.price_upside != null && reportData.final_rating.price_upside >= 0
+      ? 'text-success'
+      : 'text-destructive';
 
   return (
     <DashboardLayoutWrapper>
@@ -400,7 +403,7 @@ export default function ReportPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="px-4 py-3.5 rounded-lg bg-surface-secondary/30 border border-border/20">
                     <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-2.5">Recommendation</p>
-                    <RecommendationBadge recommendation={reportData.final_rating.recommendation} />
+                    <RecommendationBadge recommendation={reportData.final_rating?.recommendation ?? 'HOLD'} />
                   </div>
                   <div className="px-4 py-3.5 rounded-lg bg-surface-secondary/30 border border-border/20">
                     <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-2.5">Current Price</p>
@@ -409,9 +412,9 @@ export default function ReportPage() {
                   <div className="px-4 py-3.5 rounded-lg bg-surface-secondary/30 border border-border/20">
                     <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-2.5">12-Month Target</p>
                     <div className="flex items-baseline gap-2">
-                      <p className="text-2xl font-bold text-foreground tracking-tight">${reportData.final_rating.target_price.toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-foreground tracking-tight">${(reportData.final_rating?.target_price ?? 0).toFixed(2)}</p>
                       <p className={`text-sm font-bold ${upsideColor}`}>
-                        {reportData.final_rating.price_upside >= 0 ? '+' : ''}{reportData.final_rating.price_upside.toFixed(1)}%
+                        {(reportData.final_rating?.price_upside ?? 0) >= 0 ? '+' : ''}{(reportData.final_rating?.price_upside ?? 0).toFixed(1)}%
                       </p>
                     </div>
                   </div>
@@ -534,20 +537,20 @@ export default function ReportPage() {
                     <Target className="w-4.5 h-4.5 text-primary" />
                     <h3 className="text-base font-bold text-foreground tracking-tight">Final Rating &amp; Price Target</h3>
                   </div>
-                  <p className="text-sm text-foreground/80 leading-relaxed">{reportData.final_rating.rationale}</p>
+                  <p className="text-sm text-foreground/80 leading-relaxed">{reportData.final_rating?.rationale ?? ''}</p>
                   <div className="grid grid-cols-3 gap-4 pt-2 border-t border-border/10">
                     <div>
                       <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-2">Conviction</p>
-                      <p className="text-xl font-bold text-foreground">{reportData.final_rating.conviction}</p>
+                      <p className="text-xl font-bold text-foreground">{reportData.final_rating?.conviction ?? '—'}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-2">Target Price</p>
-                      <p className="text-xl font-bold text-foreground">${reportData.final_rating.target_price.toFixed(2)}</p>
+                      <p className="text-xl font-bold text-foreground">${(reportData.final_rating?.target_price ?? 0).toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-2">Upside</p>
                       <p className={`text-xl font-bold ${upsideColor}`}>
-                        {reportData.final_rating.price_upside >= 0 ? '+' : ''}{reportData.final_rating.price_upside.toFixed(1)}%
+                        {(reportData.final_rating?.price_upside ?? 0) >= 0 ? '+' : ''}{(reportData.final_rating?.price_upside ?? 0).toFixed(1)}%
                       </p>
                     </div>
                   </div>

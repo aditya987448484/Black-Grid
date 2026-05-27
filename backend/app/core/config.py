@@ -120,8 +120,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     class Config:
-        env_file = ".env"
-        case_sensitive = False  # Allow both LOWERCASE and lowercase env vars
+        import os as _os
+        _here = _os.path.dirname(_os.path.abspath(__file__))
+        _backend = _os.path.dirname(_os.path.dirname(_here))
+        env_file = _os.path.join(_backend, ".env")
+        env_file_encoding = "utf-8"
+        case_sensitive = False
 
 
 # Singleton instance

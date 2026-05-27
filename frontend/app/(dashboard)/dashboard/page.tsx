@@ -23,9 +23,7 @@ export default function DashboardPage() {
     if (hasError && error) {
       console.error('Dashboard API Error:', {
         endpoint: '/api/market/overview',
-        error: error.message,
-        status: (error as any).response?.status,
-        data: (error as any).response?.data,
+        error: error,
       });
     }
   }, [hasError, error]);
@@ -45,7 +43,7 @@ export default function DashboardPage() {
           <div className="flex-1">
             <p className="text-sm font-semibold text-destructive">Failed to fetch market data from /api/market/overview</p>
             <p className="text-xs text-destructive/70 mt-1.5 leading-relaxed">
-              {error?.message || 'Unknown error. Check browser console for details.'}
+              {error ?? 'Unknown error. Check browser console for details.'}
             </p>
           </div>
         </div>

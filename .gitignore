@@ -63,6 +63,10 @@ yarn.lock
 out/
 dist/
 
+# Allow frontend source directories that match Python artifact patterns
+!frontend/lib/
+!frontend/lib/**
+
 # Build outputs
 build/
 dist/

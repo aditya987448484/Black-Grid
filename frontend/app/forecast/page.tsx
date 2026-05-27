@@ -19,9 +19,13 @@ const MODEL_DESCRIPTIONS = {
 export default function ForecastPage() {
   const [ticker, setTicker] = useState('AAPL');
   const [searchInput, setSearchInput] = useState('AAPL');
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const forecastRequest = useCallback(() => forecast.getComparison(ticker), [ticker]);
-  const { data: forecastData, status, execute } = useApi<ForecastResponse>(forecastRequest, true);
+  const forecastRequest = useCallback(
+    () => forecast.getComparison(ticker),
+    [ticker, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const { data: forecastData, status } = useApi<ForecastResponse>(forecastRequest, true);
 
   const isLoading = status === 'pending';
   const hasError = status === 'error';
@@ -32,8 +36,8 @@ export default function ForecastPage() {
     }
   };
 
-  const handleRefresh = async () => {
-    await execute();
+  const handleRefresh = () => {
+    setRefreshKey((k) => k + 1);
   };
 
   // Models are already in the array from API
