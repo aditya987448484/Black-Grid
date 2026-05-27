@@ -128,12 +128,14 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
 
 export default function AnalystWorkspace({ report }: AnalystWorkspaceProps) {
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const r = report;
   const rating = r.final_rating;
 
   // ── Export handler — POSTs report to backend, triggers browser download ──
   async function handleExport() {
     setExporting(true);
+    setExportError(null);
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/analyst/export-pdf`,
@@ -159,8 +161,8 @@ export default function AnalystWorkspace({ report }: AnalystWorkspaceProps) {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Export failed";
-      alert(`PDF export failed: ${msg}`);
+      // I3 — show inline error instead of blocking alert()
+      setExportError(err instanceof Error ? err.message : "Export failed");
     } finally {
       setExporting(false);
     }
@@ -219,6 +221,13 @@ export default function AnalystWorkspace({ report }: AnalystWorkspaceProps) {
               </>
             )}
           </button>
+
+          {/* I3 — inline error replaces blocking alert() */}
+          {exportError && (
+            <p className="text-[10px] text-red-400 max-w-[160px] text-right leading-tight">
+              {exportError}
+            </p>
+          )}
         </div>
       </div>
 

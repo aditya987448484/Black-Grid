@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from html import escape
 from typing import Optional
 
 from app.schemas.schemas import (
@@ -61,11 +62,11 @@ def _risk_rows(items: list[RiskAndCatalyst]) -> str:
     rows = []
     for item in items:
         colour = _severity_colour(item.severity)
-        mit = item.mitigation or "—"
+        mit = escape(item.mitigation or "—")
         rows.append(
             f"<tr>"
-            f"<td>{item.description}</td>"
-            f"<td style='color:{colour};font-weight:600;text-align:center'>{item.severity}</td>"
+            f"<td>{escape(item.description)}</td>"
+            f"<td style='color:{colour};font-weight:600;text-align:center'>{escape(item.severity)}</td>"
             f"<td>{mit}</td>"
             f"</tr>"
         )
@@ -88,24 +89,45 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
     bear = r.bear_case
     rating_col = _rating_colour(rating.recommendation)
 
-    # Format date
+    # Format date — strip Z suffix before parsing (fromisoformat rejects it on Py<3.11)
     report_date = r.report_date
     if isinstance(report_date, str):
-        report_date = datetime.fromisoformat(report_date)
+        report_date = datetime.fromisoformat(report_date.replace("Z", "+00:00"))
     date_str = report_date.strftime("%B %d, %Y")
 
     # Bull / bear probability bars
     bull_bar = f"<div style='height:6px;background:{_rating_colour(RecommendationType.BUY)};width:{bull.probability:.0f}%;border-radius:3px'></div>"
     bear_bar = f"<div style='height:6px;background:{_rating_colour(RecommendationType.SELL)};width:{bear.probability:.0f}%;border-radius:3px'></div>"
 
-    # Catalyst list items
-    bull_items = "".join(f"<li>{c}</li>" for c in bull.key_catalysts)
-    bear_items = "".join(f"<li>{c}</li>" for c in bear.key_catalysts)
-    tailwinds  = "".join(f"<li>{t}</li>" for t in macro.industry_tailwinds)
-    headwinds  = "".join(f"<li>{h}</li>" for h in macro.macro_headwinds)
+    # Catalyst list items — escape all LLM-originated strings
+    bull_items = "".join(f"<li>{escape(c)}</li>" for c in bull.key_catalysts)
+    bear_items = "".join(f"<li>{escape(c)}</li>" for c in bear.key_catalysts)
+    tailwinds  = "".join(f"<li>{escape(t)}</li>" for t in macro.industry_tailwinds)
+    headwinds  = "".join(f"<li>{escape(h)}</li>" for h in macro.macro_headwinds)
 
     risk_rows     = _risk_rows(r.risks)
     catalyst_rows = _risk_rows(r.catalysts)
+
+    # Pre-escape all LLM-originated free-text fields once here.
+    # Everything below this point is safe to embed in HTML.
+    company_name       = escape(r.company_name)
+    ticker_upper       = escape(r.ticker.upper())
+    executive_summary  = escape(r.executive_summary)
+    investment_hl      = escape(r.investment_highlight)
+    rating_rationale   = escape(rating.rationale)
+    rating_conviction  = escape(rating.conviction)
+    tech_trend         = escape(tech.trend)
+    tech_momentum      = escape(tech.momentum)
+    tech_ma            = escape(tech.ma_alignment)
+    tech_summary       = escape(tech.summary)
+    fund_valuation     = escape(fund.valuation_assessment)
+    macro_sector       = escape(macro.sector_performance)
+    macro_outlook      = escape(macro.macro_outlook)
+    bull_thesis        = escape(bull.thesis)
+    bull_timeline      = escape(bull.timeline)
+    bear_thesis        = escape(bear.thesis)
+    bear_timeline      = escape(bear.timeline)
+    rating_value       = escape(rating.recommendation.value)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -235,22 +257,22 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
 <div class="header">
   <div>
     <div class="logo">Black<span>Grid</span></div>
-    <div class="company">{r.company_name}</div>
+    <div class="company">{company_name}</div>
     <div class="sub">
-      {r.ticker.upper()} &nbsp;·&nbsp; {date_str} &nbsp;·&nbsp;
+      {ticker_upper} &nbsp;·&nbsp; {date_str} &nbsp;·&nbsp;
       Current Price: {_fmt_price(r.current_price)} &nbsp;·&nbsp;
       Confidence: {r.confidence_score:.0f}%
     </div>
   </div>
   <div class="rating-box">
     <div class="rating-label">Recommendation</div>
-    <div class="rating-value">{rating.recommendation.value}</div>
+    <div class="rating-value">{rating_value}</div>
     <div class="target-price">
       Target: {_fmt_price(rating.target_price)}&nbsp;
       ({_fmt_pct(rating.price_upside)})
     </div>
     <div style="font-size:7.5pt;color:#64748b;margin-top:2px">
-      Conviction: <strong style="color:#94a3b8">{rating.conviction}</strong>
+      Conviction: <strong style="color:#94a3b8">{rating_conviction}</strong>
     </div>
   </div>
 </div>
@@ -261,16 +283,16 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
   <!-- 1. Executive Summary -->
   <div class="section">
     <div class="section-title">Executive Summary</div>
-    <p class="prose">{r.executive_summary}</p>
+    <p class="prose">{executive_summary}</p>
     <p class="prose" style="margin-top:8px;font-weight:500;color:#f8fafc">
-      ⚡ {r.investment_highlight}
+      ⚡ {investment_hl}
     </p>
   </div>
 
   <!-- 2. Final Rating Rationale -->
   <div class="section">
     <div class="section-title">Rating Rationale</div>
-    <p class="prose">{rating.rationale}</p>
+    <p class="prose">{rating_rationale}</p>
     <div style="margin-top:8px">
       <div style="font-size:7.5pt;color:#64748b">
         Overall Confidence Score — {r.confidence_score:.0f} / 100
@@ -317,7 +339,7 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
       </div>
       <div class="metric-card" style="grid-column:span 2">
         <div class="metric-label">Valuation</div>
-        <div class="metric-value" style="font-size:11pt">{fund.valuation_assessment}</div>
+        <div class="metric-value" style="font-size:11pt">{fund_valuation}</div>
       </div>
     </div>
   </div>
@@ -328,7 +350,7 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
     <div class="metric-grid">
       <div class="metric-card">
         <div class="metric-label">Trend</div>
-        <div class="metric-value" style="font-size:11pt">{tech.trend}</div>
+        <div class="metric-value" style="font-size:11pt">{tech_trend}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Signal Strength</div>
@@ -337,14 +359,14 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
       </div>
       <div class="metric-card">
         <div class="metric-label">Momentum</div>
-        <div class="metric-value" style="font-size:11pt">{tech.momentum}</div>
+        <div class="metric-value" style="font-size:11pt">{tech_momentum}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">MA Alignment</div>
-        <div class="metric-value" style="font-size:10pt">{tech.ma_alignment}</div>
+        <div class="metric-value" style="font-size:10pt">{tech_ma}</div>
       </div>
     </div>
-    <p class="prose" style="margin-top:10px">{tech.summary}</p>
+    <p class="prose" style="margin-top:10px">{tech_summary}</p>
     <p style="margin-top:6px;font-size:8pt;color:#64748b">
       Key levels: {" · ".join(_fmt_price(lv) for lv in tech.key_levels)}
     </p>
@@ -364,8 +386,8 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
       </div>
     </div>
     <div style="margin-top:10px;font-size:8.5pt;color:#94a3b8">
-      Sector Performance: <strong style="color:#f8fafc">{macro.sector_performance}</strong>
-      &nbsp;·&nbsp; Macro Outlook: <strong style="color:#f8fafc">{macro.macro_outlook}</strong>
+      Sector Performance: <strong style="color:#f8fafc">{macro_sector}</strong>
+      &nbsp;·&nbsp; Macro Outlook: <strong style="color:#f8fafc">{macro_outlook}</strong>
       &nbsp;·&nbsp; Market Correlation: <strong style="color:#f8fafc">{macro.correlation_market:.2f}</strong>
     </div>
   </div>
@@ -376,19 +398,19 @@ def _build_html(report: AnalystReport) -> str:                    # noqa: PLR091
     <div class="two-col">
       <div class="case-box">
         <div class="case-title case-bull">▲ Bull Case ({bull.probability:.0f}%)</div>
-        <p class="case-thesis">{bull.thesis}</p>
+        <p class="case-thesis">{bull_thesis}</p>
         <ul class="case-list">{bull_items}</ul>
         <div class="prob-label">Probability</div>
         {bull_bar}
-        <div style="font-size:7pt;color:#64748b;margin-top:3px">Timeline: {bull.timeline}</div>
+        <div style="font-size:7pt;color:#64748b;margin-top:3px">Timeline: {bull_timeline}</div>
       </div>
       <div class="case-box">
         <div class="case-title case-bear">▼ Bear Case ({bear.probability:.0f}%)</div>
-        <p class="case-thesis">{bear.thesis}</p>
+        <p class="case-thesis">{bear_thesis}</p>
         <ul class="case-list">{bear_items}</ul>
         <div class="prob-label">Probability</div>
         {bear_bar}
-        <div style="font-size:7pt;color:#64748b;margin-top:3px">Timeline: {bear.timeline}</div>
+        <div style="font-size:7pt;color:#64748b;margin-top:3px">Timeline: {bear_timeline}</div>
       </div>
     </div>
   </div>
