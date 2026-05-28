@@ -259,7 +259,15 @@ function MessageBubble({ msg, onViewReport }: { msg: Message; onViewReport: (r: 
       )}
       <div style={{ maxWidth: "76%", minWidth: 40 }}>
         <div style={{ background: isUser ? "#0f1e3a" : "rgba(255,255,255,0.04)", border: `1px solid ${isUser ? "rgba(30,90,160,0.35)" : BORDER_SUB}`, borderRadius: isUser ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "10px 14px" }}>
-          {msg.isTyping ? <TypingIndicator /> : renderMarkdown(msg.content)}
+          {msg.isTyping
+            ? <TypingIndicator />
+            : msg.role === "assistant" && msg.content === ""
+              ? (
+                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", fontStyle: "italic", margin: 0 }}>
+                  Analysis ready — see document panel →
+                </p>
+              )
+              : renderMarkdown(msg.content)}
         </div>
 
         {!isUser && msg.reportLoading && (
@@ -664,7 +672,9 @@ function InputBar({ value, onChange, onSend, attachments, onAttach, onRemoveAtta
 // ── Analysis detection ────────────────────────────────────────────────────────
 
 function isAnalysis(text: string): boolean {
-  return /\b(analyze|analysis|report|research|deep\s*dive|break\s*down|tell\s+me\s+about|assess|evaluate|overview)\b/i.test(text);
+  // Match any phrasing that requests a full stock analysis
+  // analys[ei] catches: analyze, analyse, analyzes, analyses, analysis
+  return /\b(analys[ei]|analysis|report\s+on|research|deep\s*dive|break\s*down|tell\s+me\s+about|assess|evaluate|overview|price\s+target|investment\s+thesis)\b/i.test(text);
 }
 
 // ── Ticker extraction ─────────────────────────────────────────────────────────
@@ -872,7 +882,7 @@ export default function AIAnalystPage() {
           analysisText: reply,
           messages: c.messages.map((m) =>
             m.id === asstId
-              ? { ...m, content: "Analysis complete — see the document panel on the right →", isTyping: false }
+              ? { ...m, content: "", isTyping: false }
               : m
           ),
         }));
