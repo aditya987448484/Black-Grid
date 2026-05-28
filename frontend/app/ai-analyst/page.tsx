@@ -312,33 +312,40 @@ function MTile({ label, value }: { label: string; value: string }) {
 
 interface DocPanelProps {
   report: AnalystReport | null;
-  analysisText: string | null;
+  lastAssistantText: string | null;
   onExport: () => void;
   exporting: boolean;
   exportErr: string | null;
 }
 
-function DocPanel({ report, analysisText, onExport, exporting, exportErr }: DocPanelProps) {
-  const hasContent = !!report || !!analysisText;
+function DocPanel({ report, lastAssistantText, onExport, exporting, exportErr }: DocPanelProps) {
+  const hasContent = !!report || !!lastAssistantText;
   const scrollCSS: CSS = { flex: 1, overflowY: "auto", padding: 20, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent" };
 
   // ── Shared header ─────────────────────────────────────────────────────────
-  const panelHeader = (label: string, sub?: string) => (
-    <>
-      <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+  const panelHeader = (
+    <div style={{ flexShrink: 0 }}>
+      <div style={{ padding: "13px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0d0f14" }}>
         <div>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: GOLD, margin: 0 }}>{label}</p>
-          {sub && <p style={{ fontSize: 12, color: "rgba(255,255,255,0.38)", marginTop: 2, marginBottom: 0 }}>{sub}</p>}
+          <p style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>Research Document</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9", margin: "2px 0 0" }}>
+            {report ? `${report.ticker} · ${report.company_name}` : lastAssistantText ? "AI Analysis" : "Awaiting Analysis"}
+          </p>
         </div>
         {hasContent && (
           <button
             onClick={onExport}
             disabled={exporting}
-            style={{ display: "flex", alignItems: "center", gap: 5, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, color: "#e8c96a", borderRadius: 7, padding: "6px 14px", fontSize: 12, fontWeight: 500, cursor: exporting ? "not-allowed" : "pointer", opacity: exporting ? 0.6 : 1 }}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, color: "#e8c96a", borderRadius: 7, padding: "6px 14px", fontSize: 12, fontWeight: 500, cursor: exporting ? "not-allowed" : "pointer", opacity: exporting ? 0.6 : 1 }}
             onMouseEnter={(e) => { if (!exporting) e.currentTarget.style.background = "rgba(201,168,76,0.22)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = GOLD_DIM; }}
           >
-            ⬇ {exporting ? "Generating…" : "Download PDF"}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {exporting ? "Generating…" : "Download PDF"}
           </button>
         )}
       </div>
@@ -347,14 +354,14 @@ function DocPanel({ report, analysisText, onExport, exporting, exportErr }: DocP
           {exportErr}
         </div>
       )}
-    </>
+    </div>
   );
 
   // ── Empty placeholder ─────────────────────────────────────────────────────
   if (!hasContent) {
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-        {panelHeader("Research Document")}
+        {panelHeader}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 32, opacity: 0.5 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
             📄
@@ -369,12 +376,12 @@ function DocPanel({ report, analysisText, onExport, exporting, exportErr }: DocP
   }
 
   // ── Markdown fallback (analysis text, no structured report yet) ───────────
-  if (!report && analysisText) {
+  if (!report && lastAssistantText) {
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-        {panelHeader("Research Document", "AI Analysis")}
+        {panelHeader}
         <div style={scrollCSS} className="ai-panel-body">
-          {renderMarkdown(analysisText)}
+          {renderMarkdown(lastAssistantText)}
         </div>
       </div>
     );
@@ -386,7 +393,7 @@ function DocPanel({ report, analysisText, onExport, exporting, exportErr }: DocP
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      {panelHeader(r.ticker.toUpperCase(), r.company_name)}
+      {panelHeader}
 
       <div style={scrollCSS} className="ai-panel-body">
 
@@ -654,6 +661,12 @@ function InputBar({ value, onChange, onSend, attachments, onAttach, onRemoveAtta
   );
 }
 
+// ── Analysis detection ────────────────────────────────────────────────────────
+
+function isAnalysis(text: string): boolean {
+  return /\b(analyze|analysis|report|research|deep\s*dive|break\s*down|tell\s+me\s+about|assess|evaluate|overview)\b/i.test(text);
+}
+
 // ── Ticker extraction ─────────────────────────────────────────────────────────
 
 function extractTicker(text: string): string | null {
@@ -736,8 +749,8 @@ export default function AIAnalystPage() {
   }
 
   // ── Export PDF ─────────────────────────────────────────────────────────────
-  async function handleExportPdf() {
-    const analysisText = activeConv?.analysisText ?? lastAssistant?.content ?? null;
+  async function handleExportMarkdown() {
+    const analysisText = activeConv?.analysisText ?? null;
     const ticker =
       activeConv?.report?.ticker ??
       extractTicker(activeConv?.messages?.slice(-1)[0]?.content ?? "") ??
@@ -766,7 +779,7 @@ export default function AIAnalystPage() {
           body: JSON.stringify({
             ticker,
             title:        `${ticker} — Institutional Analysis`,
-            content:      analysisText,
+            content:      analysisText ?? "",
             generated_at: new Date().toISOString(),
           }),
         });
@@ -852,14 +865,25 @@ export default function AIAnalystPage() {
       const json  = await chatRes.json() as { reply?: string; message?: string };
       const reply = json.reply ?? json.message ?? "No response received.";
 
-      // Store full reply as analysisText so doc panel can show/export it
-      updateConv(convId, (c) => ({
-        ...c,
-        analysisText: reply,
-        messages: c.messages.map((m) =>
-          m.id === asstId ? { ...m, content: reply, isTyping: false } : m
-        ),
-      }));
+      // Route: analysis → doc panel (short ack in chat); other → chat only
+      if (isAnalysis(userText)) {
+        updateConv(convId, (c) => ({
+          ...c,
+          analysisText: reply,
+          messages: c.messages.map((m) =>
+            m.id === asstId
+              ? { ...m, content: "Analysis complete — see the document panel on the right →", isTyping: false }
+              : m
+          ),
+        }));
+      } else {
+        updateConv(convId, (c) => ({
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === asstId ? { ...m, content: reply, isTyping: false } : m
+          ),
+        }));
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "An error occurred.";
       updateConv(convId, (c) => ({
@@ -892,11 +916,6 @@ export default function AIAnalystPage() {
 
     setIsLoading(false);
   }
-
-  // ── Doc panel content ──────────────────────────────────────────────────────
-  const lastAssistant = [...(activeConv?.messages ?? [])].reverse().find(
-    (m) => m.role === "assistant" && !m.isTyping && m.content
-  );
 
   const threadCSS: CSS = {
     flex: 1, overflowY: "auto",
@@ -969,8 +988,8 @@ export default function AIAnalystPage() {
         <div style={{ width: "50%", flexShrink: 0, background: CARD, borderLeft: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
           <DocPanel
             report={activeConv.report}
-            analysisText={activeConv.analysisText ?? lastAssistant?.content ?? null}
-            onExport={handleExportPdf}
+            lastAssistantText={activeConv.analysisText ?? null}
+            onExport={handleExportMarkdown}
             exporting={exporting}
             exportErr={exportErr}
           />
