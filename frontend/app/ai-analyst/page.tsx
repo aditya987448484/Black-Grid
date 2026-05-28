@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 
-// ── Types (all inline — no external imports) ──────────────────────────────────
+// ── Types (all inline) ────────────────────────────────────────────────────────
 
 interface TechnicalViewpoint {
   trend: string;
@@ -90,6 +90,7 @@ interface Conversation {
   title: string;
   messages: Message[];
   report: AnalystReport | null;
+  analysisText: string | null;
   lastMessage?: string;
 }
 
@@ -100,11 +101,6 @@ type CSS = React.CSSProperties & {
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const MODELS = [
-  { id: "deepseek-chat",     label: "DeepSeek V3" },
-  { id: "deepseek-reasoner", label: "DeepSeek R1" },
-];
 
 const SUGGESTIONS = [
   "Analyze TSMC",
@@ -119,9 +115,9 @@ const CARD       = "#111318";
 const SIDEBAR_BG = "#0d0f14";
 const BORDER     = "rgba(255,255,255,0.07)";
 const BORDER_SUB = "rgba(255,255,255,0.06)";
-const PURPLE     = "#7c3aed";
-const PURPLE_DIM = "rgba(124,58,237,0.18)";
-const PURPLE_MID = "rgba(124,58,237,0.35)";
+const GOLD       = "#c9a84c";
+const GOLD_DIM   = "rgba(201,168,76,0.12)";
+const GOLD_MID   = "rgba(201,168,76,0.28)";
 const API        = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -188,7 +184,7 @@ function renderMarkdown(text: string): React.ReactNode {
     }
 
     if (line.startsWith("### ")) { els.push(<h4 key={key++} style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", margin: "10px 0 4px" }}>{renderInline(line.slice(4), `h4${key}`)}</h4>); i++; continue; }
-    if (line.startsWith("## "))  { els.push(<h3 key={key++} style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", margin: "12px 0 4px" }}>{renderInline(line.slice(3), `h3${key}`)}</h3>); i++; continue; }
+    if (line.startsWith("## "))  { els.push(<h3 key={key++} style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", margin: "12px 0 4px", borderBottom: `1px solid ${BORDER}`, paddingBottom: 4 }}>{renderInline(line.slice(3), `h3${key}`)}</h3>); i++; continue; }
     if (line.startsWith("# "))   { els.push(<h2 key={key++} style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: "14px 0 6px" }}>{renderInline(line.slice(2), `h2${key}`)}</h2>); i++; continue; }
 
     if (/^[\-\*]\s/.test(line)) {
@@ -226,12 +222,12 @@ function TypingIndicator() {
 function EmptyState({ onChipClick }: { onChipClick: (t: string) => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16, padding: 24 }}>
-      <div style={{ width: 56, height: 56, borderRadius: 14, background: PURPLE_DIM, border: `1px solid ${PURPLE_MID}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 14, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
         📈
       </div>
       <div style={{ textAlign: "center" }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>AI Analyst</h2>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 4, marginBottom: 0 }}>Powered by DeepSeek · Ask about any stock</p>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 4, marginBottom: 0 }}>Ask me to analyze any stock</p>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 4 }}>
         {SUGGESTIONS.map((s) => (
@@ -239,7 +235,7 @@ function EmptyState({ onChipClick }: { onChipClick: (t: string) => void }) {
             key={s}
             onClick={() => onChipClick(s)}
             style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 20, padding: "7px 16px", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}
-            onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = PURPLE_DIM; b.style.borderColor = PURPLE_MID; b.style.color = "#e2e8f0"; }}
+            onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = GOLD_DIM; b.style.borderColor = GOLD_MID; b.style.color = "#e8c96a"; }}
             onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = CARD; b.style.borderColor = BORDER; b.style.color = "#94a3b8"; }}
           >
             {s}
@@ -257,12 +253,12 @@ function MessageBubble({ msg, onViewReport }: { msg: Message; onViewReport: (r: 
   return (
     <div style={{ display: "flex", flexDirection: isUser ? "row-reverse" : "row", alignItems: "flex-start", gap: 10, marginBottom: 16 }}>
       {!isUser && (
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: PURPLE_DIM, border: `1px solid ${PURPLE_MID}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, marginTop: 2 }}>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, marginTop: 2 }}>
           📈
         </div>
       )}
       <div style={{ maxWidth: "76%", minWidth: 40 }}>
-        <div style={{ background: isUser ? "rgba(124,58,237,0.14)" : "rgba(255,255,255,0.04)", border: `1px solid ${isUser ? PURPLE_MID : BORDER_SUB}`, borderRadius: isUser ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "10px 14px" }}>
+        <div style={{ background: isUser ? "#0f1e3a" : "rgba(255,255,255,0.04)", border: `1px solid ${isUser ? "rgba(30,90,160,0.35)" : BORDER_SUB}`, borderRadius: isUser ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "10px 14px" }}>
           {msg.isTyping ? <TypingIndicator /> : renderMarkdown(msg.content)}
         </div>
 
@@ -270,7 +266,7 @@ function MessageBubble({ msg, onViewReport }: { msg: Message; onViewReport: (r: 
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="ai-spin">
               <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
-              <path d="M12 2a10 10 0 0110 10" stroke={PURPLE} strokeWidth="3" strokeLinecap="round" />
+              <path d="M12 2a10 10 0 0110 10" stroke={GOLD} strokeWidth="3" strokeLinecap="round" />
             </svg>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Fetching structured report…</span>
           </div>
@@ -278,9 +274,9 @@ function MessageBubble({ msg, onViewReport }: { msg: Message; onViewReport: (r: 
         {!isUser && msg.reportData && !msg.reportLoading && (
           <button
             onClick={() => onViewReport(msg.reportData!)}
-            style={{ marginTop: 8, background: PURPLE_DIM, border: `1px solid ${PURPLE_MID}`, borderRadius: 6, padding: "5px 12px", color: "#a78bfa", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(124,58,237,0.28)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = PURPLE_DIM; }}
+            style={{ marginTop: 8, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, borderRadius: 6, padding: "5px 12px", color: "#e8c96a", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,168,76,0.22)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = GOLD_DIM; }}
           >
             📋 View Report
           </button>
@@ -316,65 +312,82 @@ function MTile({ label, value }: { label: string; value: string }) {
 
 interface DocPanelProps {
   report: AnalystReport | null;
-  lastAssistantText: string | null;
-  onExportReport: (r: AnalystReport) => Promise<void>;
+  analysisText: string | null;
+  onExport: () => void;
   exporting: boolean;
   exportErr: string | null;
 }
 
-function DocPanel({ report, lastAssistantText, onExportReport, exporting, exportErr }: DocPanelProps) {
+function DocPanel({ report, analysisText, onExport, exporting, exportErr }: DocPanelProps) {
+  const hasContent = !!report || !!analysisText;
   const scrollCSS: CSS = { flex: 1, overflowY: "auto", padding: 20, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent" };
 
+  // ── Shared header ─────────────────────────────────────────────────────────
+  const panelHeader = (label: string, sub?: string) => (
+    <>
+      <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: GOLD, margin: 0 }}>{label}</p>
+          {sub && <p style={{ fontSize: 12, color: "rgba(255,255,255,0.38)", marginTop: 2, marginBottom: 0 }}>{sub}</p>}
+        </div>
+        {hasContent && (
+          <button
+            onClick={onExport}
+            disabled={exporting}
+            style={{ display: "flex", alignItems: "center", gap: 5, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, color: "#e8c96a", borderRadius: 7, padding: "6px 14px", fontSize: 12, fontWeight: 500, cursor: exporting ? "not-allowed" : "pointer", opacity: exporting ? 0.6 : 1 }}
+            onMouseEnter={(e) => { if (!exporting) e.currentTarget.style.background = "rgba(201,168,76,0.22)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = GOLD_DIM; }}
+          >
+            ⬇ {exporting ? "Generating…" : "Download PDF"}
+          </button>
+        )}
+      </div>
+      {exportErr && (
+        <div style={{ padding: "7px 18px", background: "rgba(239,68,68,0.1)", fontSize: 12, color: "#f87171", borderBottom: `1px solid ${BORDER}` }}>
+          {exportErr}
+        </div>
+      )}
+    </>
+  );
+
   // ── Empty placeholder ─────────────────────────────────────────────────────
-  if (!report && !lastAssistantText) {
+  if (!hasContent) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12, padding: 32, opacity: 0.5 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
-          📄
-        </div>
-        <div style={{ textAlign: "center" }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "#94a3b8", margin: 0 }}>Document Panel</p>
-          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", marginTop: 6, lineHeight: 1.5 }}>Ask to analyze a stock to<br />generate a structured report</p>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+        {panelHeader("Research Document")}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 32, opacity: 0.5 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
+            📄
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#94a3b8", margin: 0 }}>Document Panel</p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", marginTop: 6, lineHeight: 1.5 }}>Ask me to analyze a stock to<br />generate a research document</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Markdown fallback (only text, no structured report yet) ───────────────
-  if (!report && lastAssistantText) {
+  // ── Markdown fallback (analysis text, no structured report yet) ───────────
+  if (!report && analysisText) {
     return (
-      <div style={scrollCSS} className="ai-panel-body">
-        <div style={{ marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${BORDER}` }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: PURPLE, margin: 0 }}>AI Response</p>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+        {panelHeader("Research Document", "AI Analysis")}
+        <div style={scrollCSS} className="ai-panel-body">
+          {renderMarkdown(analysisText)}
         </div>
-        {renderMarkdown(lastAssistantText)}
       </div>
     );
   }
 
-  // ── Full structured report ─────────────────────────────────────────────────
+  // ── Full structured report ────────────────────────────────────────────────
   const r  = report!;
   const rt = r.final_rating;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      {/* Panel header */}
-      <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{r.ticker.toUpperCase()}</div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.38)", marginTop: 1 }}>{r.company_name}</div>
-        </div>
-        <button
-          onClick={() => onExportReport(r)}
-          disabled={exporting}
-          style={{ background: PURPLE_DIM, border: `1px solid ${PURPLE_MID}`, borderRadius: 6, padding: "5px 12px", color: "#a78bfa", fontSize: 12, cursor: exporting ? "not-allowed" : "pointer", opacity: exporting ? 0.6 : 1 }}
-        >
-          {exporting ? "Exporting…" : "⬇ PDF"}
-        </button>
-      </div>
-      {exportErr && <div style={{ padding: "7px 18px", background: "rgba(239,68,68,0.1)", fontSize: 12, color: "#f87171", borderBottom: `1px solid ${BORDER}` }}>{exportErr}</div>}
+      {panelHeader(r.ticker.toUpperCase(), r.company_name)}
 
-      {/* Scrollable content */}
       <div style={scrollCSS} className="ai-panel-body">
 
         <PSection title="Recommendation">
@@ -482,7 +495,7 @@ function DocPanel({ report, lastAssistantText, onExportReport, exporting, export
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 10, color: "rgba(255,255,255,0.32)", flexShrink: 0 }}>Confidence</span>
             <div style={{ flex: 1, height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
-              <div style={{ height: 6, borderRadius: 3, background: PURPLE, width: `${r.confidence_score ?? 0}%`, transition: "width 0.6s ease" }} />
+              <div style={{ height: 6, borderRadius: 3, background: GOLD, width: `${r.confidence_score ?? 0}%`, transition: "width 0.6s ease" }} />
             </div>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", flexShrink: 0 }}>{(r.confidence_score ?? 0).toFixed(0)}%</span>
           </div>
@@ -511,14 +524,14 @@ function Sidebar({ conversations, activeId, onSelect, onNew }: SidebarProps) {
       {/* Brand + New button */}
       <div style={{ padding: "16px 14px 12px", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: PURPLE_DIM, border: `1px solid ${PURPLE_MID}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>📈</div>
+          <div style={{ width: 28, height: 28, borderRadius: 7, background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>📈</div>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9", letterSpacing: "0.01em" }}>AI Analyst</span>
         </div>
         <button
           onClick={onNew}
-          style={{ width: "100%", background: PURPLE_DIM, border: `1px solid ${PURPLE_MID}`, borderRadius: 8, padding: "8px 12px", color: "#a78bfa", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(124,58,237,0.28)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = PURPLE_DIM; }}
+          style={{ width: "100%", background: GOLD_DIM, border: `1px solid ${GOLD_MID}`, borderRadius: 8, padding: "8px 12px", color: "#e8c96a", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,168,76,0.22)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = GOLD_DIM; }}
         >
           <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
           New Conversation
@@ -536,11 +549,11 @@ function Sidebar({ conversations, activeId, onSelect, onNew }: SidebarProps) {
             <button
               key={conv.id}
               onClick={() => onSelect(conv.id)}
-              style={{ width: "calc(100% - 16px)", background: isActive ? PURPLE_DIM : "transparent", border: isActive ? `1px solid ${PURPLE_MID}` : "1px solid transparent", borderRadius: 8, margin: "2px 8px", padding: "8px 10px", cursor: "pointer", textAlign: "left", display: "block", boxSizing: "border-box" }}
+              style={{ width: "calc(100% - 16px)", background: isActive ? GOLD_DIM : "transparent", border: isActive ? `1px solid ${GOLD_MID}` : "1px solid transparent", borderRadius: 8, margin: "2px 8px", padding: "8px 10px", cursor: "pointer", textAlign: "left", display: "block", boxSizing: "border-box" }}
               onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
               onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
             >
-              <p style={{ fontSize: 12, fontWeight: 600, color: isActive ? "#a78bfa" : "#94a3b8", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: isActive ? "#e8c96a" : "#94a3b8", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {conv.title}
               </p>
               {conv.lastMessage && (
@@ -567,15 +580,13 @@ interface InputBarProps {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
-  model: string;
-  onModelChange: (m: string) => void;
   attachments: Attachment[];
   onAttach: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
   disabled: boolean;
 }
 
-function InputBar({ value, onChange, onSend, model, onModelChange, attachments, onAttach, onRemoveAttachment, disabled }: InputBarProps) {
+function InputBar({ value, onChange, onSend, attachments, onAttach, onRemoveAttachment, disabled }: InputBarProps) {
   const taRef   = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -630,16 +641,10 @@ function InputBar({ value, onChange, onSend, model, onModelChange, attachments, 
           style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#e2e8f0", fontSize: 14, fontFamily: "inherit", resize: "none", lineHeight: 1.5, maxHeight: 180, overflowY: "auto", padding: "2px 0" } as CSS}
         />
 
-        {/* Model selector */}
-        <select value={model} onChange={(e) => onModelChange(e.target.value)}
-          style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${BORDER}`, borderRadius: 6, color: "rgba(255,255,255,0.45)", fontSize: 11, padding: "4px 6px", cursor: "pointer", flexShrink: 0, outline: "none" }}>
-          {MODELS.map((m) => <option key={m.id} value={m.id} style={{ background: "#1a1a1a" }}>{m.label}</option>)}
-        </select>
-
         {/* Send button */}
         <button onClick={onSend} disabled={!canSend} aria-label="Send"
-          style={{ background: canSend ? PURPLE : "rgba(255,255,255,0.07)", border: "none", borderRadius: 8, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: canSend ? "pointer" : "not-allowed", flexShrink: 0, transition: "background 0.15s" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={canSend ? "#fff" : "rgba(255,255,255,0.25)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          style={{ background: canSend ? GOLD : "rgba(255,255,255,0.07)", border: "none", borderRadius: 8, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: canSend ? "pointer" : "not-allowed", flexShrink: 0, transition: "background 0.15s" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={canSend ? "#000" : "rgba(255,255,255,0.25)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
@@ -652,7 +657,6 @@ function InputBar({ value, onChange, onSend, model, onModelChange, attachments, 
 // ── Ticker extraction ─────────────────────────────────────────────────────────
 
 function extractTicker(text: string): string | null {
-  // "analyze TSMC", "analysis of META", "what about AAPL", "NVDA looks", "$TSLA"
   const patterns = [
     /\banalyze\s+([a-z]{1,10})\b/i,
     /\banalysis\s+(?:of\s+)?([a-z]{1,10})\b/i,
@@ -664,12 +668,11 @@ function extractTicker(text: string): string | null {
     /\$([A-Z]{1,5})\b/,
     /\b([A-Z]{2,5})\s+(?:stock|shares|ticker|analysis|price|forecast)\b/,
   ];
+  const stopWords = ["THE", "AND", "FOR", "ALL", "ARE", "NOT", "WITH", "THIS", "THAT", "FROM", "HAVE", "WILL", "WHAT", "WHICH", "RISKS"];
   for (const p of patterns) {
     const m = text.match(p);
     if (m) {
       const t = m[1].toUpperCase();
-      // Exclude common English words
-      const stopWords = ["THE", "AND", "FOR", "ALL", "ARE", "NOT", "WITH", "THIS", "THAT", "FROM", "HAVE", "WILL", "WHAT", "WHICH"];
       if (!stopWords.includes(t)) return t;
     }
   }
@@ -683,6 +686,7 @@ const newConversation = (): Conversation => ({
   title:        "New Chat",
   messages:     [],
   report:       null,
+  analysisText: null,
   lastMessage:  undefined,
 });
 
@@ -690,14 +694,12 @@ export default function AIAnalystPage() {
   const [conversations,    setConversations]    = useState<Conversation[]>([newConversation()]);
   const [activeId,         setActiveId]         = useState<string>(conversations[0].id);
   const [input,            setInput]            = useState("");
-  const [model,            setModel]            = useState("deepseek-chat");
   const [attachments,      setAttachments]      = useState<Attachment[]>([]);
   const [isLoading,        setIsLoading]        = useState(false);
   const [exporting,        setExporting]        = useState(false);
   const [exportErr,        setExportErr]        = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
-  // Active conversation helpers
   const activeConv = conversations.find((c) => c.id === activeId) ?? conversations[0];
 
   const updateConv = useCallback((id: string, updater: (c: Conversation) => Conversation) => {
@@ -716,6 +718,7 @@ export default function AIAnalystPage() {
     setActiveId(conv.id);
     setInput("");
     setAttachments([]);
+    setExportErr(null);
   }
 
   // ── File attach ────────────────────────────────────────────────────────────
@@ -733,41 +736,75 @@ export default function AIAnalystPage() {
   }
 
   // ── Export PDF ─────────────────────────────────────────────────────────────
-  async function handleExportReport(r: AnalystReport) {
-    setExporting(true); setExportErr(null);
+  async function handleExportPdf() {
+    const analysisText = activeConv?.analysisText ?? lastAssistant?.content ?? null;
+    const ticker =
+      activeConv?.report?.ticker ??
+      extractTicker(activeConv?.messages?.slice(-1)[0]?.content ?? "") ??
+      "Research";
+
+    if (!analysisText && !activeConv?.report) {
+      setExportErr("No analysis to export yet");
+      return;
+    }
+
+    setExporting(true);
+    setExportErr(null);
+
+    let res: Response;
     try {
-      const res = await fetch(`${API}/analyst/export-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(r),
-      });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({})) as { detail?: string };
-        throw new Error(e.detail ?? `HTTP ${res.status}`);
+      if (activeConv?.report) {
+        res = await fetch(`${API}/analyst/export-pdf`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(activeConv.report),
+        });
+      } else {
+        res = await fetch(`${API}/analyst/export-markdown-pdf`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ticker,
+            title:        `${ticker} — Institutional Analysis`,
+            content:      analysisText,
+            generated_at: new Date().toISOString(),
+          }),
+        });
       }
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { detail?: string };
+        throw new Error(errData.detail ?? `HTTP ${res.status}`);
+      }
+
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `${r.ticker.toUpperCase()}_BlackGrid_Research.pdf`;
-      document.body.appendChild(a); a.click(); a.remove();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `${ticker.toUpperCase()}_BlackGrid_Research.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setExportErr(err instanceof Error ? err.message : "Export failed");
-    } finally { setExporting(false); }
+      setExportErr(err instanceof Error ? err.message : "PDF export failed");
+    } finally {
+      setExporting(false);
+    }
   }
 
   // ── Send message ───────────────────────────────────────────────────────────
   async function handleSend() {
     if (!input.trim() || isLoading) return;
 
-    const convId    = activeId;
-    const userText  = input.trim();
+    const convId     = activeId;
+    const userText   = input.trim();
     const sentAttach = [...attachments];
     setInput(""); setAttachments([]); setIsLoading(true);
+    setExportErr(null);
 
-    // Derive title from first message
     const isFirst = activeConv.messages.length === 0;
-    const title = isFirst ? userText.slice(0, 36) + (userText.length > 36 ? "…" : "") : activeConv.title;
+    const title   = isFirst ? userText.slice(0, 36) + (userText.length > 36 ? "…" : "") : activeConv.title;
 
     // 1. Add user message
     const userMsgId = genId();
@@ -801,7 +838,7 @@ export default function AIAnalystPage() {
     const chatFetch = fetch(`${API}/ai-analyst/chat`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ message: userText, history, model, attachments: sentAttach.map((a) => a.filename) }),
+      body:    JSON.stringify({ message: userText, history, model: "deepseek-chat", attachments: sentAttach.map((a) => a.filename) }),
     });
     const reportFetch = ticker ? fetch(`${API}/report/${ticker}`) : null;
 
@@ -812,11 +849,16 @@ export default function AIAnalystPage() {
         const e = await chatRes.json().catch(() => ({})) as { detail?: string };
         throw new Error(e.detail ?? `HTTP ${chatRes.status}`);
       }
-      const json = await chatRes.json() as { reply?: string; message?: string };
+      const json  = await chatRes.json() as { reply?: string; message?: string };
       const reply = json.reply ?? json.message ?? "No response received.";
+
+      // Store full reply as analysisText so doc panel can show/export it
       updateConv(convId, (c) => ({
         ...c,
-        messages: c.messages.map((m) => m.id === asstId ? { ...m, content: reply, isTyping: false } : m),
+        analysisText: reply,
+        messages: c.messages.map((m) =>
+          m.id === asstId ? { ...m, content: reply, isTyping: false } : m
+        ),
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "An error occurred.";
@@ -833,7 +875,7 @@ export default function AIAnalystPage() {
       try {
         const rRes = await reportFetch;
         if (!rRes.ok) throw new Error(`Report HTTP ${rRes.status}`);
-        const rJson = await rRes.json() as { data: AnalystReport };
+        const rJson      = await rRes.json() as { data: AnalystReport };
         const reportData = rJson.data;
         updateConv(convId, (c) => ({
           ...c,
@@ -852,9 +894,9 @@ export default function AIAnalystPage() {
   }
 
   // ── Doc panel content ──────────────────────────────────────────────────────
-  const lastAssistant = [...activeConv.messages].reverse().find((m) => m.role === "assistant" && !m.isTyping && m.content);
-  const docReport = activeConv.report;
-  const docText   = lastAssistant?.content ?? null;
+  const lastAssistant = [...(activeConv?.messages ?? [])].reverse().find(
+    (m) => m.role === "assistant" && !m.isTyping && m.content
+  );
 
   const threadCSS: CSS = {
     flex: 1, overflowY: "auto",
@@ -897,7 +939,7 @@ export default function AIAnalystPage() {
         <Sidebar
           conversations={conversations}
           activeId={activeId}
-          onSelect={(id) => { setActiveId(id); }}
+          onSelect={(id) => { setActiveId(id); setExportErr(null); }}
           onNew={handleNew}
         />
 
@@ -917,19 +959,18 @@ export default function AIAnalystPage() {
           </div>
           <InputBar
             value={input} onChange={setInput} onSend={handleSend}
-            model={model} onModelChange={setModel}
             attachments={attachments} onAttach={handleAttach}
             onRemoveAttachment={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
             disabled={isLoading}
           />
         </div>
 
-        {/* ── Document panel (50% width) ───────────────────────────────────── */}
+        {/* ── Document panel (50%) ─────────────────────────────────────────── */}
         <div style={{ width: "50%", flexShrink: 0, background: CARD, borderLeft: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
           <DocPanel
-            report={docReport}
-            lastAssistantText={docText}
-            onExportReport={handleExportReport}
+            report={activeConv.report}
+            analysisText={activeConv.analysisText ?? lastAssistant?.content ?? null}
+            onExport={handleExportPdf}
             exporting={exporting}
             exportErr={exportErr}
           />
